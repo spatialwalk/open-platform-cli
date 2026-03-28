@@ -1,0 +1,391 @@
+syntax = "proto3";
+
+package console.v2;
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "console/v2/async_processing.proto";
+import "jsonapi/v1/base.proto";
+
+option go_package = "github.com/spatialwalk/backend-ng/api/generated/console/v2";
+
+// 角色信息
+message Avatar {
+  // 角色ID
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  
+  // 封面图片URL
+  string cover_url = 2;
+  
+  // 角色名称
+  string name = 3;
+  
+  // 角色描述
+  string description = 4;
+  
+  // 创建时间
+  google.protobuf.Timestamp created_at = 5;
+  
+  // 更新时间
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+// 角色详情信息，包含所有 Avatar 字段加上额外的详情字段
+message AvatarDetail {
+  // 角色ID
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  
+  // 封面图片URL
+  string cover_url = 2;
+  
+  // 角色名称
+  string name = 3;
+  
+  // 创建时间
+  google.protobuf.Timestamp created_at = 4;
+  
+  // 更新时间
+  google.protobuf.Timestamp updated_at = 5;
+  
+  // 模型设置，仅在详情接口返回
+  google.protobuf.Struct model_settings = 6;
+  
+  // 角色设置，仅在详情接口返回
+  google.protobuf.Struct character_settings = 7;
+  
+  // 驱动服务URL，仅在详情接口返回
+  string driven_base_url = 8;
+
+  // Shape NPY 数据，仅在详情接口返回
+  bytes shape_npy = 9;
+  
+  // Style NPY 数据，仅在详情接口返回
+  bytes style_npy = 10;
+}
+
+// 列出角色请求
+message ListAvatarsRequest {
+  optional jsonapi.v1.PaginationRequest pagination = 1;
+}
+
+// 列出角色响应
+message ListAvatarsResponse {
+  repeated Avatar avatars = 1;
+  jsonapi.v1.PaginationResponse pagination = 2;
+}
+
+// 编辑角色请求
+message UpdateAvatarRequest {
+  // 角色ID
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  
+  // 角色名称
+  optional string name = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
+  
+  // 模型设置
+  optional google.protobuf.Struct model_settings = 3;
+  
+  // 角色设置
+  optional google.protobuf.Struct character_settings = 4;
+}
+
+// 编辑角色响应
+message UpdateAvatarResponse {
+  Avatar avatar = 1;
+}
+
+// 删除角色请求
+message DeleteAvatarRequest {
+  // 角色ID
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// 删除角色响应
+message DeleteAvatarResponse {}
+
+// 复制角色请求
+message CopyAvatarRequest {
+  // 角色ID
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// 复制角色响应
+message CopyAvatarResponse {
+  Avatar avatar = 1;
+}
+
+// 获取角色详情请求
+message GetAvatarDetailRequest {
+  // 角色ID
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// 获取角色详情响应
+message GetAvatarDetailResponse {
+  AvatarDetail avatar = 1;
+}
+
+// 申请创建角色请求
+message CreateAvatarRequest {
+  // 图片路径 (R2 object key)
+  string image_path = 1 [(buf.validate.field).string = {
+    min_len: 1
+  }];
+  
+  // 角色名称
+  string avatar_name = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
+  
+  // 是否跳过 AI 生成胸像的逻辑
+  optional bool skip_ai_avatar_generation = 3;
+
+  // kling 驱动视频 ID (deprecated: use faceflow_version + v2_preset_id instead)
+  optional string kling_motion_preset_id = 4;
+
+  // FaceFlow 管线版本
+  // 不填走旧管线，V2_0 或 V2_2 走 CF Workers
+  optional FaceFlowVersion faceflow_version = 5 [(buf.validate.field).enum.defined_only = true];
+
+  // V2 预设 ID（仅用于 faceflow_version 为 V2_x 时），默认 1
+  optional int32 v2_preset_id = 6;
+}
+
+// 申请创建角色响应
+message CreateAvatarResponse {
+  // 角色ID
+  string id = 1;
+  
+  // 提示消息
+  string message = 2;
+}
+
+// Avatar申请状态
+enum AvatarApplyStatus {
+  AVATAR_APPLY_STATUS_UNSPECIFIED = 0;
+  AVATAR_APPLY_STATUS_PENDING = 1;
+  AVATAR_APPLY_STATUS_GENERATING_AVATAR = 2;
+  AVATAR_APPLY_STATUS_AVATAR_READY = 3;
+  AVATAR_APPLY_STATUS_GENERATING_VIDEO = 4;
+  AVATAR_APPLY_STATUS_VIDEO_READY = 5;
+  AVATAR_APPLY_STATUS_TRAINING_MODEL = 6;
+  AVATAR_APPLY_STATUS_MODEL_READY = 7;
+  AVATAR_APPLY_STATUS_COMPLETED = 8;
+  AVATAR_APPLY_STATUS_FAILED = 9;
+  AVATAR_APPLY_STATUS_GENERATING_IDLE_ANIMATION_VIDEO = 10;
+  AVATAR_APPLY_STATUS_IDLE_ANIMATION_VIDEO_READY = 11;
+}
+
+// Avatar申请
+message AvatarApply {
+  // 申请ID
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  
+  // 用户上传的原始头像图片Material ID
+  optional string avatar_material_id = 2 [(buf.validate.field).string.uuid = true];
+  
+  // AI生成的胸像图片素材ID
+  optional string ai_avatar_material_id = 3 [(buf.validate.field).string.uuid = true];
+  
+  // AI生成的视频素材ID
+  optional string ai_video_material_id = 4 [(buf.validate.field).string.uuid = true];
+  
+  // 生成的AssetGroup ID
+  optional string asset_group_id = 5 [(buf.validate.field).string.uuid = true];
+  
+  // 自动创建的角色ID
+  optional string character_id = 6 [(buf.validate.field).string.uuid = true];
+  
+  // 申请状态
+  AvatarApplyStatus status = 7 [(buf.validate.field).enum.defined_only = true];
+  
+  // 当前阶段描述
+  optional string current_stage = 8;
+  
+  // 失败原因
+  optional string failure_reason = 9;
+  
+  // 生成分辨率：480P/720P/1080P
+  string resolution = 10 [
+    (buf.validate.field).string.in = "480P",
+    (buf.validate.field).string.in = "720P",
+    (buf.validate.field).string.in = "1080P"
+  ];
+  
+  // 角色名称（用户提交时指定）
+  optional string avatar_name = 11;
+  
+  // 创建时间
+  google.protobuf.Timestamp created_at = 12 [(buf.validate.field).required = true];
+  
+  // 更新时间
+  google.protobuf.Timestamp updated_at = 13 [(buf.validate.field).required = true];
+  
+  // 原始图片URL（从R2 key转换为public URL）
+  optional string original_image_url = 14;
+
+  // 进度信息
+  optional ModelApplyProgress progress = 15;
+}
+
+// 进度信息
+message ModelApplyProgress {
+  int32 total_steps = 1;
+  int32 current_step = 2;
+  string current_stage = 3;
+  int32 percentage = 4;
+}
+
+// 删除Avatar申请请求
+message DeleteAvatarApplyRequest {
+  // 申请ID
+  string apply_id = 1 [(buf.validate.field).required = true, (buf.validate.field).string.uuid = true];
+}
+
+// 删除Avatar申请响应
+message DeleteAvatarApplyResponse {}
+
+// 列表Avatar申请请求
+message ListAvatarAppliesRequest {
+  // 分页参数
+  optional jsonapi.v1.PaginationRequest pagination = 1;
+  
+  // 用户ID过滤（可选）
+  optional string user_id = 2 [(buf.validate.field).string.uuid = true];
+  
+  // 状态过滤（可选）
+  repeated AvatarApplyStatus statuses = 3 [(buf.validate.field).repeated.items.enum.defined_only = true];
+}
+
+// 列表Avatar申请响应
+message ListAvatarAppliesResponse {
+  // Avatar申请列表
+  repeated AvatarApply applies = 1;
+  
+  // 分页响应
+  jsonapi.v1.PaginationResponse pagination = 2;
+}
+
+// DPT 驱动 Provider 信息
+message DrivenProvider {
+  // Provider ID
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  
+  // Provider 名称
+  string name = 2 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
+  
+  // API URL
+  string api_url = 3;
+}
+
+// 列表 DPT 驱动 Provider 请求
+message ListDrivenProvidersRequest {
+}
+
+// 列表 DPT 驱动 Provider 响应
+message ListDrivenProvidersResponse {
+  repeated DrivenProvider providers = 1;
+}
+
+// Kling 驱动视频预设
+message KlingMotionPreset {
+  // 预设ID
+  string id = 1;
+  
+  // 视频URL
+  string url = 2;
+  
+  // 标签
+  string label = 3;
+}
+
+// 列出 kling 驱动视频请求
+message ListKlingMotionPresetsRequest {
+}
+
+// 列出 kling 驱动视频响应
+message ListKlingMotionPresetsResponse {
+  repeated KlingMotionPreset presets = 1;
+}
+
+// 角色管理服务
+service AvatarService {
+  // 列出角色
+  rpc ListAvatars(ListAvatarsRequest) returns (ListAvatarsResponse) {
+    option (google.api.http) = {get: "/v2/console/avatars"};
+    option (jsonapi.v1.requires_login) = true;
+  }
+  
+  // 编辑角色
+  rpc UpdateAvatar(UpdateAvatarRequest) returns (UpdateAvatarResponse) {
+    option (google.api.http) = {
+      patch: "/v2/console/avatars/{id}"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+  
+  // 删除角色
+  rpc DeleteAvatar(DeleteAvatarRequest) returns (DeleteAvatarResponse) {
+    option (google.api.http) = {delete: "/v2/console/avatars/{id}"};
+    option (jsonapi.v1.requires_login) = true;
+  }
+  
+  // 申请创建角色
+  rpc CreateAvatar(CreateAvatarRequest) returns (CreateAvatarResponse) {
+    option (google.api.http) = {
+      post: "/v2/console/avatars"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+  
+  // 获取角色详情
+  rpc GetAvatarDetail(GetAvatarDetailRequest) returns (GetAvatarDetailResponse) {
+    option (google.api.http) = {get: "/v2/console/avatars/{id}"};
+    option (jsonapi.v1.requires_login) = true;
+  }
+  
+  // 列表Avatar申请
+  rpc ListAvatarApplies(ListAvatarAppliesRequest) returns (ListAvatarAppliesResponse) {
+    option (google.api.http) = {get: "/v2/console/avatar-applies"};
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // 删除Avatar申请
+  rpc DeleteAvatarApply(DeleteAvatarApplyRequest) returns (DeleteAvatarApplyResponse) {
+    option (google.api.http) = {delete: "/v2/console/avatar-applies/{apply_id}"};
+    option (jsonapi.v1.requires_login) = true;
+  }
+  
+  // 复制角色
+  rpc CopyAvatar(CopyAvatarRequest) returns (CopyAvatarResponse) {
+    option (google.api.http) = {
+      post: "/v2/console/avatars/{id}/copy"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+  
+  // 列表 DPT 驱动 Provider
+  rpc ListDrivenProviders(ListDrivenProvidersRequest) returns (ListDrivenProvidersResponse) {
+    option (google.api.http) = {get: "/v2/console/driven-providers"};
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // 列出 kling 驱动视频
+  rpc ListKlingMotionPresets(ListKlingMotionPresetsRequest) returns (ListKlingMotionPresetsResponse) {
+    option (google.api.http) = {get: "/v2/console/kling-motion-presets"};
+    option (jsonapi.v1.requires_login) = true;
+  }
+}
+

@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package common.v1;
+
+import "buf/validate/validate.proto";
+
+option go_package = "github.com/spatialwalk/backend-ng/api/generated/common/v1";
+
+// CustomAnimation 自定义动画配置
+// 用于角色资产组的自定义动画定义
+message CustomAnimation {
+  string key = 1 [(buf.validate.field).string.min_len = 1]; // 动画唯一标识
+  string pb_url = 2 [(buf.validate.field).string.uri = true]; // pb类型动画文件URL
+  string wav_url = 3; // wav类型音频文件URL（可选）
+  string remark = 4; // 备注说明
+}

@@ -1,0 +1,475 @@
+syntax = "proto3";
+
+package console.v2;
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "jsonapi/v1/base.proto";
+
+option go_package = "github.com/spatialwalk/backend-ng/api/generated/console/v2";
+
+// Granularity for usage statistics
+enum StatsGranularity {
+  STATS_GRANULARITY_UNSPECIFIED = 0;
+  STATS_GRANULARITY_MINUTE = 1;
+  STATS_GRANULARITY_HOUR = 2;
+  STATS_GRANULARITY_DAY = 3;
+}
+
+// Time range for queries
+enum StatsTimeRange {
+  STATS_TIME_RANGE_UNSPECIFIED = 0;
+  // Last 24 hours
+  STATS_TIME_RANGE_24H = 1;
+  // Last 7 days
+  STATS_TIME_RANGE_7D = 2;
+  // Last 30 days
+  STATS_TIME_RANGE_30D = 3;
+  // Custom range (use start_time and end_time)
+  STATS_TIME_RANGE_CUSTOM = 4;
+}
+
+// Overview stat card item
+message OverviewStatItem {
+  // Stat value
+  int64 value = 1;
+  // Previous period value (for comparison)
+  int64 previous_value = 2;
+  // Change percentage compared to previous period (e.g., 15.5 means +15.5%)
+  double change_percent = 3;
+}
+
+// Get driven stats overview request
+message AdminGetDrivenStatsOverviewRequest {
+  // Time range preset
+  StatsTimeRange time_range = 1;
+  // Custom start time (required when time_range is CUSTOM)
+  optional google.protobuf.Timestamp start_time = 2;
+  // Custom end time (required when time_range is CUSTOM)
+  optional google.protobuf.Timestamp end_time = 3;
+  // Optional region filter
+  optional string region = 4;
+  // Optional app ID filter
+  optional string app_id = 5;
+}
+
+// Get driven stats overview response
+message AdminGetDrivenStatsOverviewResponse {
+  // Total audio duration in milliseconds
+  OverviewStatItem total_audio_duration_ms = 1;
+  // Total connection duration in milliseconds
+  OverviewStatItem total_connection_duration_ms = 2;
+  // Total request count
+  OverviewStatItem total_request_count = 3;
+  // Peak concurrent connections
+  OverviewStatItem peak_concurrent_connections = 4;
+}
+
+// Time series data point for trends
+message TrendDataPoint {
+  // Timestamp for this data point
+  google.protobuf.Timestamp timestamp = 1;
+  // Audio duration in milliseconds
+  int64 audio_duration_ms = 2;
+  // Connection duration in milliseconds
+  int64 connection_duration_ms = 3;
+  // Request count
+  int64 request_count = 4;
+}
+
+// Get driven stats trend request
+message AdminGetDrivenStatsTrendRequest {
+  // Time range preset
+  StatsTimeRange time_range = 1;
+  // Custom start time (required when time_range is CUSTOM)
+  optional google.protobuf.Timestamp start_time = 2;
+  // Custom end time (required when time_range is CUSTOM)
+  optional google.protobuf.Timestamp end_time = 3;
+  // Granularity for the trend data
+  StatsGranularity granularity = 4 [(buf.validate.field).enum = {
+    not_in: [0]
+  }];
+  // Optional region filter
+  optional string region = 5;
+  // Optional app ID filter
+  optional string app_id = 6;
+}
+
+// Get driven stats trend response
+message AdminGetDrivenStatsTrendResponse {
+  // Time series data points
+  repeated TrendDataPoint data_points = 1;
+}
+
+// Region distribution item
+message RegionDistributionItem {
+  // Region identifier
+  string region = 1;
+  // Audio duration in milliseconds
+  int64 audio_duration_ms = 2;
+  // Connection duration in milliseconds
+  int64 connection_duration_ms = 3;
+  // Request count
+  int64 request_count = 4;
+  // Percentage of total
+  double percentage = 5;
+}
+
+// Get driven stats region distribution request
+message AdminGetDrivenStatsRegionDistributionRequest {
+  // Time range preset
+  StatsTimeRange time_range = 1;
+  // Custom start time (required when time_range is CUSTOM)
+  optional google.protobuf.Timestamp start_time = 2;
+  // Custom end time (required when time_range is CUSTOM)
+  optional google.protobuf.Timestamp end_time = 3;
+  // Optional app ID filter
+  optional string app_id = 4;
+}
+
+// Get driven stats region distribution response
+message AdminGetDrivenStatsRegionDistributionResponse {
+  // Distribution by region
+  repeated RegionDistributionItem regions = 1;
+}
+
+// Concurrency trend data point
+message ConcurrencyDataPoint {
+  // Timestamp for this data point
+  google.protobuf.Timestamp timestamp = 1;
+  // Concurrent connections at this time
+  int32 concurrent_connections = 2;
+}
+
+// Get concurrency trend request
+message AdminGetConcurrencyTrendRequest {
+  // Time range preset
+  StatsTimeRange time_range = 1;
+  // Custom start time (required when time_range is CUSTOM)
+  optional google.protobuf.Timestamp start_time = 2;
+  // Custom end time (required when time_range is CUSTOM)
+  optional google.protobuf.Timestamp end_time = 3;
+  // Optional region filter
+  optional string region = 4;
+  // Optional app ID filter
+  optional string app_id = 5;
+}
+
+// Get concurrency trend response
+message AdminGetConcurrencyTrendResponse {
+  // Time series concurrency data
+  repeated ConcurrencyDataPoint data_points = 1;
+  // Peak concurrent connections in the period
+  int32 peak_concurrent_connections = 2;
+  // Average concurrent connections in the period
+  double avg_concurrent_connections = 3;
+}
+
+// Top app stats item
+message TopAppStatsItem {
+  // App ID
+  string app_id = 1;
+  // App name (if available)
+  string app_name = 2;
+  // User ID (owner)
+  string user_id = 3;
+  // Audio duration in milliseconds
+  int64 audio_duration_ms = 4;
+  // Connection duration in milliseconds
+  int64 connection_duration_ms = 5;
+  // Request count
+  int64 request_count = 6;
+  // Peak concurrent connections
+  int32 peak_concurrent_connections = 7;
+}
+
+// Sort by field for top apps
+enum TopAppsSortBy {
+  TOP_APPS_SORT_BY_UNSPECIFIED = 0;
+  TOP_APPS_SORT_BY_AUDIO_DURATION = 1;
+  TOP_APPS_SORT_BY_CONNECTION_DURATION = 2;
+  TOP_APPS_SORT_BY_REQUEST_COUNT = 3;
+  TOP_APPS_SORT_BY_PEAK_CONCURRENCY = 4;
+}
+
+// Get top apps request
+message AdminGetTopAppsRequest {
+  // Time range preset
+  StatsTimeRange time_range = 1;
+  // Custom start time (required when time_range is CUSTOM)
+  optional google.protobuf.Timestamp start_time = 2;
+  // Custom end time (required when time_range is CUSTOM)
+  optional google.protobuf.Timestamp end_time = 3;
+  // Sort by field
+  TopAppsSortBy sort_by = 4;
+  // Optional region filter
+  optional string region = 5;
+  // Pagination
+  optional jsonapi.v1.PaginationRequest pagination = 6;
+  // Optional app ID filter
+  optional string app_id = 7;
+}
+
+// Get top apps response
+message AdminGetTopAppsResponse {
+  // Top apps list
+  repeated TopAppStatsItem apps = 1;
+  // Pagination info
+  jsonapi.v1.PaginationResponse pagination = 2;
+}
+
+// Real-time stats request
+message AdminGetRealtimeStatsRequest {
+  // Dimension to query: "global", "app", or "user"
+  string dimension = 1 [(buf.validate.field).string = {
+    in: ["global", "app", "user"]
+  }];
+
+  // ID of the dimension (app_id or user_id)
+  // Required when dimension is "app" or "user", ignored when dimension is "global"
+  optional string id = 2;
+}
+
+// Real-time stats response
+message AdminGetRealtimeStatsResponse {
+  // The dimension queried
+  string dimension = 1;
+
+  // The ID queried (empty for global)
+  string id = 2;
+
+  // Current number of concurrent connections
+  int64 concurrency = 3;
+
+  // Today's total audio duration in milliseconds
+  int64 today_ms = 4;
+
+  // Current hour's audio duration in milliseconds
+  int64 current_hour_ms = 5;
+
+  // Current minute's audio duration in milliseconds
+  int64 current_minute_ms = 6;
+}
+
+// ============ Top Users API ============
+
+// Sort by field for top users
+enum TopUsersSortBy {
+  TOP_USERS_SORT_BY_UNSPECIFIED = 0;
+  TOP_USERS_SORT_BY_AUDIO_DURATION = 1;
+  TOP_USERS_SORT_BY_CONNECTION_DURATION = 2;
+  TOP_USERS_SORT_BY_REQUEST_COUNT = 3;
+}
+
+// Top user stats item
+message TopUserStatsItem {
+  // User ID
+  string user_id = 1;
+  // User email (if available)
+  string user_email = 2;
+  // Audio duration in milliseconds
+  int64 audio_duration_ms = 3;
+  // Connection duration in milliseconds
+  int64 connection_duration_ms = 4;
+  // Request count
+  int64 request_count = 5;
+  // Number of apps used by this user
+  int32 app_count = 6;
+  // Peak concurrent connections
+  int32 peak_concurrent_connections = 7;
+  // Admin remark/note for this user
+  optional string remark = 8;
+}
+
+// Get top users request
+message AdminGetTopUsersRequest {
+  // Time range preset
+  StatsTimeRange time_range = 1;
+  // Custom start time (required when time_range is CUSTOM)
+  optional google.protobuf.Timestamp start_time = 2;
+  // Custom end time (required when time_range is CUSTOM)
+  optional google.protobuf.Timestamp end_time = 3;
+  // Sort by field
+  TopUsersSortBy sort_by = 4;
+  // Optional region filter
+  optional string region = 5;
+  // Optional user ID filter
+  optional string user_id = 6;
+  // Pagination
+  optional jsonapi.v1.PaginationRequest pagination = 7;
+}
+
+// Get top users response
+message AdminGetTopUsersResponse {
+  // Top users list
+  repeated TopUserStatsItem users = 1;
+  // Pagination info
+  jsonapi.v1.PaginationResponse pagination = 2;
+}
+
+// ============ Entity Stats API ============
+
+// Entity type for detailed stats query
+enum StatsEntityType {
+  STATS_ENTITY_TYPE_UNSPECIFIED = 0;
+  STATS_ENTITY_TYPE_REGION = 1;
+  STATS_ENTITY_TYPE_APP = 2;
+  STATS_ENTITY_TYPE_USER = 3;
+}
+
+// Entity info
+message EntityInfo {
+  // Entity type
+  StatsEntityType type = 1;
+  // Entity ID (region name, app_id, or user_id)
+  string id = 2;
+  // Display name (region display name, app name, or user email)
+  string display_name = 3;
+}
+
+// Usage summary statistics
+message UsageSummary {
+  // Total audio duration in milliseconds
+  int64 total_audio_duration_ms = 1;
+  // Total connection duration in milliseconds
+  int64 total_connection_duration_ms = 2;
+  // Total request count
+  int64 total_request_count = 3;
+  // Average audio duration per request (milliseconds)
+  double avg_audio_per_request = 4;
+  // Average connection duration per request (milliseconds)
+  double avg_connection_per_request = 5;
+}
+
+// Concurrency statistics
+message ConcurrencyStats {
+  // Peak concurrent connections in the period
+  int32 peak = 1;
+  // Average concurrent connections in the period
+  double average = 2;
+  // Current concurrent connections (real-time, if available)
+  int32 current = 3;
+}
+
+// Distribution item for breakdown data
+message DistributionItem {
+  // Item ID (region name, app_id, or user_id)
+  string id = 1;
+  // Item display name
+  string name = 2;
+  // Audio duration in milliseconds
+  int64 audio_duration_ms = 3;
+  // Connection duration in milliseconds
+  int64 connection_duration_ms = 4;
+  // Request count
+  int64 request_count = 5;
+  // Percentage of total
+  double percentage = 6;
+}
+
+// Get entity stats request
+message AdminGetEntityStatsRequest {
+  // Entity type to query
+  StatsEntityType entity_type = 1 [(buf.validate.field).enum = {
+    not_in: [0]
+  }];
+  // Entity ID (region name, app_id, or user_id)
+  string entity_id = 2 [(buf.validate.field).string.min_len = 1];
+  // Time range preset
+  StatsTimeRange time_range = 3;
+  // Custom start time (required when time_range is CUSTOM)
+  optional google.protobuf.Timestamp start_time = 4;
+  // Custom end time (required when time_range is CUSTOM)
+  optional google.protobuf.Timestamp end_time = 5;
+  // Granularity for trend data
+  optional StatsGranularity granularity = 6;
+}
+
+// Get entity stats response
+message AdminGetEntityStatsResponse {
+  // Entity information
+  EntityInfo entity = 1;
+
+  // Usage summary for the entity
+  UsageSummary summary = 2;
+
+  // Usage trend data (time series)
+  repeated TrendDataPoint trend = 3;
+
+  // Breakdown distribution
+  // - For REGION: top apps in this region
+  // - For APP: region distribution + top users of this app
+  // - For USER: region distribution + apps used by this user
+  repeated DistributionItem distribution = 4;
+
+  // Concurrency statistics
+  ConcurrencyStats concurrency = 5;
+}
+
+// AdminDrivenStatsService provides admin APIs for viewing driven ingress statistics
+service AdminDrivenStatsService {
+  // Get overview statistics (top stat cards)
+  rpc GetOverview(AdminGetDrivenStatsOverviewRequest) returns (AdminGetDrivenStatsOverviewResponse) {
+    option (google.api.http) = {
+      get: "/v2/admin/driven-stats/overview"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // Get usage trend data (time series)
+  rpc GetTrend(AdminGetDrivenStatsTrendRequest) returns (AdminGetDrivenStatsTrendResponse) {
+    option (google.api.http) = {
+      get: "/v2/admin/driven-stats/trend"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // Get region distribution data (for pie chart)
+  rpc GetRegionDistribution(AdminGetDrivenStatsRegionDistributionRequest) returns (AdminGetDrivenStatsRegionDistributionResponse) {
+    option (google.api.http) = {
+      get: "/v2/admin/driven-stats/region-distribution"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // Get concurrency trend data
+  rpc GetConcurrencyTrend(AdminGetConcurrencyTrendRequest) returns (AdminGetConcurrencyTrendResponse) {
+    option (google.api.http) = {
+      get: "/v2/admin/driven-stats/concurrency-trend"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // Get top apps by usage
+  rpc GetTopApps(AdminGetTopAppsRequest) returns (AdminGetTopAppsResponse) {
+    option (google.api.http) = {
+      get: "/v2/admin/driven-stats/top-apps"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // Get real-time stats from driveningress service
+  rpc GetRealtimeStats(AdminGetRealtimeStatsRequest) returns (AdminGetRealtimeStatsResponse) {
+    option (google.api.http) = {
+      get: "/v2/admin/driven-stats/realtime"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // Get top users by usage
+  rpc GetTopUsers(AdminGetTopUsersRequest) returns (AdminGetTopUsersResponse) {
+    option (google.api.http) = {
+      get: "/v2/admin/driven-stats/top-users"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // Get detailed stats for a specific entity (region, app, or user)
+  rpc GetEntityStats(AdminGetEntityStatsRequest) returns (AdminGetEntityStatsResponse) {
+    option (google.api.http) = {
+      get: "/v2/admin/driven-stats/entity/{entity_type}/{entity_id}"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+}

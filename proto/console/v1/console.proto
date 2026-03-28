@@ -1,0 +1,198 @@
+syntax = "proto3";
+
+package console.v1;
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "jsonapi/v1/base.proto";
+
+option go_package = "github.com/spatialwalk/backend-ng/api/generated/console/v1";
+
+message CreateAppRequest {
+  string name = 1 [(buf.validate.field).required = true];
+  // Optional creator user ID
+  optional string created_by = 2 [(buf.validate.field).string.uuid = true];
+}
+message CreateAppResponse {
+  // UUID v4 string
+  string app_id = 1;
+}
+
+message CreateAPIKeyRequest {
+  // Application ID to create API key for (used in URL path)
+  string app_id = 1;
+  // Optional creator user ID
+  optional string created_by = 2 [(buf.validate.field).string.uuid = true];
+}
+
+message CreateAPIKeyResponse {
+  // Created API key with metadata
+  APIKey api_key = 1;
+}
+
+message CreateSessionTokenRequest {
+  // Unix timestamp (seconds) when the token expires.
+  int64 expire_at = 1 [(buf.validate.field).int64.gt = 0];
+  // Version string of the target model/service.
+  string model_version = 2;
+}
+
+message CreateSessionTokenResponse {
+  // JWT session token signed with API key.
+  string session_token = 1;
+}
+
+message ValidateSessionTokenRequest {
+  string session_token = 1 [(buf.validate.field).required = true];
+}
+
+message ValidateSessionTokenResponse {
+  // Application id embedded in the token.
+  string app_id = 1;
+  // Version string embedded in the token.
+  string version = 2;
+  // Application-specific status code (0 = success).
+  uint32 code = 3;
+  // Human-readable message describing the result.
+  string message = 4;
+  // User ID of the user who created the API key used to generate this session token (optional).
+  string user_id = 5 [(buf.validate.field).string.uuid = true];
+}
+
+message GetOSSCredentialsRequest {
+  // Resource path to access (e.g., video/{hash}.mp4)
+  string resource_path = 1 [(buf.validate.field).required = true];
+  // Credential duration in seconds (60-3600, default 3600)
+  int64 duration_seconds = 2 [(buf.validate.field).int64 = {
+    gte: 60
+    lte: 3600
+  }];
+}
+
+message GetOSSCredentialsResponse {
+  // Temporary access key ID
+  string access_key_id = 1;
+  // Temporary secret access key
+  string secret_access_key = 2;
+  // Security token (STS Token)
+  string session_token = 3;
+  // Credential expiration time (Unix timestamp in seconds)
+  int64 expiration = 4;
+  // OSS region (e.g., ap-beijing, ap-guangzhou)
+  string region = 5;
+  // OSS bucket name
+  string bucket_name = 6;
+  // OSS provider (e.g., cos, r2)
+  string provider = 7;
+  // Base URL for accessing files
+  string base_url = 8;
+  // Account ID (for some providers like R2)
+  string account_id = 9;
+}
+
+// API Key entity
+message APIKey {
+  // Base64URL-encoded API key
+  string api_key = 1;
+  // Timestamp when the API key was created
+  google.protobuf.Timestamp created_at = 2;
+  // UUID of the user who created this API key
+  optional string created_by = 3;
+}
+
+// App entity
+message App {
+  // UUID v4 string
+  string app_id = 1;
+  // Application name
+  string name = 2;
+  // List of API keys associated with this app
+  repeated APIKey api_keys = 3;
+  // Timestamp when the app was created
+  google.protobuf.Timestamp created_at = 4;
+  // Timestamp when the app was last updated
+  google.protobuf.Timestamp updated_at = 5;
+  // UUID of the user who created this app
+  optional string created_by = 6;
+}
+
+// List Apps Request/Response
+message ListAppsRequest {
+  optional jsonapi.v1.PaginationRequest pagination = 1;
+}
+
+message ListAppsResponse {
+  repeated App apps = 1;
+  jsonapi.v1.PaginationResponse pagination = 2;
+}
+
+// Get App Request/Response
+message GetAppRequest {
+  string app_id = 1;
+}
+
+message GetAppResponse {
+  App app = 1;
+}
+
+// Delete App Request/Response
+message DeleteAppRequest {
+  string app_id = 1;
+}
+
+message DeleteAppResponse {}
+
+// Delete App Key Request/Response
+message DeleteAppKeyRequest {
+  string app_id = 1;
+  string api_key = 2 [(buf.validate.field).required = true];
+}
+
+message DeleteAppKeyResponse {}
+
+service ConsoleService {
+  rpc CreateApp(CreateAppRequest) returns (CreateAppResponse) {
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  rpc ListApps(ListAppsRequest) returns (ListAppsResponse) {
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  rpc GetApp(GetAppRequest) returns (GetAppResponse) {
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  rpc DeleteApp(DeleteAppRequest) returns (DeleteAppResponse) {
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  rpc CreateAPIKey(CreateAPIKeyRequest) returns (CreateAPIKeyResponse) {
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  rpc DeleteAppKey(DeleteAppKeyRequest) returns (DeleteAppKeyResponse) {
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  rpc CreateSessionToken(CreateSessionTokenRequest) returns (CreateSessionTokenResponse) {
+    option (google.api.http) = {
+      post: "/v1/console/session-tokens"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  rpc ValidateSessionToken(ValidateSessionTokenRequest) returns (ValidateSessionTokenResponse) {
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  rpc GetOSSCredentials(GetOSSCredentialsRequest) returns (GetOSSCredentialsResponse) {
+    option (google.api.http) = {
+      post: "/v1/console/oss-credentials"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = false;
+  }
+}

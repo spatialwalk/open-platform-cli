@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package console.v2;
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "jsonapi/v1/base.proto";
+import "console/v2/avatar.proto";
+
+option go_package = "github.com/spatialwalk/backend-ng/api/generated/console/v2";
+
+// Admin avatar apply list item with user information
+message AdminAvatarApplyListItem {
+  // Avatar apply information
+  AvatarApply apply = 1;
+  // User email (if available)
+  optional string user_email = 2;
+  // User remark (admin note)
+  optional string user_remark = 3;
+}
+
+// Admin list avatar applies request
+message AdminListAvatarAppliesRequest {
+  // Pagination
+  optional jsonapi.v1.PaginationRequest pagination = 1;
+  // Filter by user ID
+  optional string user_id = 2 [(buf.validate.field).string.uuid = true];
+  // Filter by status
+  repeated AvatarApplyStatus statuses = 3 [(buf.validate.field).repeated.items.enum.defined_only = true];
+  // Filter by user email (case-insensitive substring match)
+  optional string email = 4;
+}
+
+// Admin list avatar applies response
+message AdminListAvatarAppliesResponse {
+  // Avatar apply list items
+  repeated AdminAvatarApplyListItem applies = 1;
+  // Pagination
+  jsonapi.v1.PaginationResponse pagination = 2;
+}
+
+// Admin delete avatar apply request
+message AdminDeleteAvatarApplyRequest {
+  // Avatar apply ID
+  string id = 1 [(buf.validate.field).required = true, (buf.validate.field).string.uuid = true];
+}
+
+// Admin delete avatar apply response
+message AdminDeleteAvatarApplyResponse {}
+
+// AdminAvatarApplyService provides admin management for avatar applies
+service AdminAvatarApplyService {
+  // List all avatar applies with user information
+  rpc AdminListAvatarApplies(AdminListAvatarAppliesRequest) returns (AdminListAvatarAppliesResponse) {
+    option (google.api.http) = {
+      get: "/v2/admin/avatar-applies"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // Delete an avatar apply record
+  rpc AdminDeleteAvatarApply(AdminDeleteAvatarApplyRequest) returns (AdminDeleteAvatarApplyResponse) {
+    option (google.api.http) = {
+      delete: "/v2/admin/avatar-applies/{id}"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+}

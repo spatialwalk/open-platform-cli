@@ -1,0 +1,118 @@
+syntax = "proto3";
+
+package console.v2;
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "jsonapi/v1/base.proto";
+
+option go_package = "github.com/spatialwalk/backend-ng/api/generated/console/v2";
+
+// Time range presets for user stats queries
+enum UserStatsTimeRange {
+  USER_STATS_TIME_RANGE_UNSPECIFIED = 0;
+  // Today 00:00 UTC ~ now → hourly granularity
+  USER_STATS_TIME_RANGE_TODAY = 1;
+  // Last 7 days → daily granularity
+  USER_STATS_TIME_RANGE_7D = 2;
+  // Last 14 days → daily granularity
+  USER_STATS_TIME_RANGE_14D = 3;
+  // Last 30 days → daily granularity
+  USER_STATS_TIME_RANGE_30D = 4;
+  // Last 90 days → daily granularity
+  USER_STATS_TIME_RANGE_90D = 5;
+  // Last 1 year → daily granularity
+  USER_STATS_TIME_RANGE_1Y = 6;
+}
+
+// ============ Usage API ============
+
+// Get usage request
+message GetUsageRequest {
+  // Time range preset
+  UserStatsTimeRange time_range = 1;
+}
+
+// Get usage response
+message GetUsageResponse {
+  // Total audio duration in milliseconds for the period
+  int64 total_audio_duration_ms = 1;
+  // Time series data points
+  repeated UsageDataPoint data_points = 2;
+  // Total connection duration in milliseconds for the period
+  int64 total_connection_duration_ms = 3;
+}
+
+// Usage data point in time series
+message UsageDataPoint {
+  // Timestamp for this data point (start of the period)
+  google.protobuf.Timestamp timestamp = 1;
+  // Audio duration in milliseconds for this period
+  int64 audio_duration_ms = 2;
+  // Connection duration in milliseconds for this period
+  int64 connection_duration_ms = 3;
+}
+
+// ============ Session Count API ============
+
+// Get session count request
+message GetSessionCountRequest {
+  // Time range preset
+  UserStatsTimeRange time_range = 1;
+}
+
+// Get session count response
+message GetSessionCountResponse {
+  // Total session count (sum of peak concurrent connections per period)
+  int64 total_session_count = 1;
+  // Time series data points
+  repeated SessionCountDataPoint data_points = 2;
+  // Max concurrent connections in the period
+  int32 max_concurrent_connections = 3;
+}
+
+// Session count data point in time series
+message SessionCountDataPoint {
+  // Timestamp for this data point (start of the period)
+  google.protobuf.Timestamp timestamp = 1;
+  // Peak concurrent connections in this period
+  int32 session_count = 2;
+}
+
+// ============ Realtime Concurrent Connections API ============
+
+// Get realtime concurrent connections request (no parameters needed)
+message GetRealtimeConcurrentConnectionsRequest {}
+
+// Get realtime concurrent connections response
+message GetRealtimeConcurrentConnectionsResponse {
+  // Current number of concurrent connections
+  int32 concurrent_connections = 1;
+}
+
+// UserDrivenStatsService provides user-facing APIs for viewing their own usage statistics
+service UserDrivenStatsService {
+  // Get audio usage time series for the authenticated user
+  rpc GetUsage(GetUsageRequest) returns (GetUsageResponse) {
+    option (google.api.http) = {
+      get: "/api/console/v2/stats/usage"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // Get session count time series for the authenticated user
+  rpc GetSessionCount(GetSessionCountRequest) returns (GetSessionCountResponse) {
+    option (google.api.http) = {
+      get: "/api/console/v2/stats/session-count"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // Get realtime concurrent connections for the authenticated user
+  rpc GetRealtimeConcurrentConnections(GetRealtimeConcurrentConnectionsRequest) returns (GetRealtimeConcurrentConnectionsResponse) {
+    option (google.api.http) = {
+      get: "/api/console/v2/stats/realtime-connections"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+}

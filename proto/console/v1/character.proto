@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package console.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "jsonapi/v1/base.proto";
+
+option go_package = "github.com/spatialwalk/backend-ng/api/generated/console/v1";
+
+// Get Character Request/Response
+message GetCharacterRequest {
+  string character_id = 1 [(buf.validate.field).string.uuid = true];
+  // Optional user_id to verify the user has access to this character
+  optional string user_id = 2 [(buf.validate.field).string.uuid = true];
+  bool include_driven_provider = 3;
+}
+
+// Character data for driven-ingress service
+message CharacterData {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  string driven_base_url = 2 [(buf.validate.field).string.uri = true];
+  bytes shape_npy = 3;
+  bytes style_npy = 4 [(buf.validate.field).required = true];
+  google.protobuf.Struct model_settings = 5;
+  string background_url = 6;
+}
+
+// Asset data for driven-ingress service
+message AssetData {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  string type = 2;
+  string url = 3 [(buf.validate.field).string.uri = true];
+  string filename = 4;
+}
+
+// AssetGroup data for driven-ingress service
+message AssetGroupData {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  bytes shape_npy = 2;
+  repeated AssetData assets = 3;
+}
+
+message DrivenProviderInfo {
+  string id = 1;
+  string name = 2;
+  map<string, string> metadata = 3;
+
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  google.protobuf.Timestamp deleted_at = 9;
+}
+
+message GetCharacterResponse {
+  CharacterData character = 1;
+  optional AssetGroupData asset_group = 2;
+  optional DrivenProviderInfo driven_provider = 3;
+}
+
+service CharacterService {
+  rpc GetCharacter(GetCharacterRequest) returns (GetCharacterResponse) {
+    option (jsonapi.v1.requires_login) = false;
+  }
+}
+

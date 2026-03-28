@@ -1,0 +1,383 @@
+syntax = "proto3";
+
+package console.v1;
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "jsonapi/v1/base.proto";
+
+option go_package = "github.com/spatialwalk/backend-ng/api/generated/console/v1";
+
+// Task type enumeration
+enum TaskType {
+  TASK_TYPE_UNSPECIFIED = 0;
+  TASK_TYPE_IDLE_ANIMATION_GENERATION = 1;
+  TASK_TYPE_RECONSTRUCTION = 2;
+  TASK_TYPE_MATERIAL_GENERATION = 3;
+  // Kling Motion Control: image + motion template video -> output video
+  TASK_TYPE_KLING_MOTION_CONTROL = 4;
+}
+
+// Task status enumeration
+enum TaskStatus {
+  TASK_STATUS_UNSPECIFIED = 0;
+  TASK_STATUS_RUNNING = 1;
+  TASK_STATUS_FAILED = 2;
+  TASK_STATUS_SUCCESS = 3;
+}
+
+enum TaskResolution {
+  TASK_RESOLUTION_UNSPECIFIED = 0;
+  TASK_RESOLUTION_480P = 1;
+  TASK_RESOLUTION_720P = 2;
+  TASK_RESOLUTION_1080P = 3;
+}
+
+// Sort field for task listing
+enum TaskSortField {
+  TASK_SORT_FIELD_UNSPECIFIED = 0; // Default: created_at DESC
+  TASK_SORT_FIELD_CREATED_AT = 1;
+  TASK_SORT_FIELD_DURATION = 2; // Sort by task duration (updated_at - created_at), only meaningful for completed tasks
+}
+
+// Sort order for task listing
+enum TaskSortOrder {
+  TASK_SORT_ORDER_UNSPECIFIED = 0; // Default: DESC
+  TASK_SORT_ORDER_ASC = 1;
+  TASK_SORT_ORDER_DESC = 2;
+}
+
+// Task entity
+message Task {
+  // Unique identifier for the task
+  string id = 1;
+  // Pipe template ID (optional)
+  optional string pipe_template_id = 2;
+  // Material ID
+  string material_id = 3;
+  // Product delivery information (JSON)
+  google.protobuf.Struct data = 4;
+  // Timestamp when the task was created
+  google.protobuf.Timestamp created_at = 5;
+  // Timestamp when the task was last updated
+  google.protobuf.Timestamp updated_at = 6;
+  // Timestamp when the task was soft deleted (null if not deleted)
+  optional google.protobuf.Timestamp deleted_at = 7;
+  // Related statuses
+  repeated Status statuses = 8;
+  // Running instance IDs
+  repeated string instances = 9;
+  // Task name
+  string name = 10;
+  // Task type
+  TaskType task_type = 11;
+  // Creator ID (optional, no foreign key relation)
+  optional string creator_id = 12;
+  // Task status (different from instance status flow)
+  TaskStatus task_status = 13;
+  // Desired resolution for the task output (optional)
+  optional TaskResolution resolution = 14;
+}
+
+// Status entity
+message Status {
+  // Unique identifier for the status
+  string id = 1;
+  // Task ID
+  string task_id = 2;
+  // Status string
+  string status = 3;
+  // Metadata (reserved for arbitrary key-value storage)
+  google.protobuf.Struct metadata = 4;
+  // Timestamp when the status was created
+  google.protobuf.Timestamp created_at = 5;
+  // Timestamp when the status was last updated
+  google.protobuf.Timestamp updated_at = 6;
+  // Timestamp when the status was soft deleted (null if not deleted)
+  optional google.protobuf.Timestamp deleted_at = 7;
+}
+
+// Create Task Request/Response
+message CreateTaskRequest {
+  optional string pipe_template_id = 1 [(buf.validate.field).string.uuid = true];
+  string material_id = 2 [(buf.validate.field).string.uuid = true];
+  google.protobuf.Struct data = 3;
+  string name = 4 [(buf.validate.field).string = {max_len: 255}];
+  // Task type (optional, defaults to idle_animation_generation)
+  optional TaskType task_type = 5;
+  // Creator ID (optional)
+  optional string creator_id = 6;
+  // Desired resolution for the task output (optional)
+  optional TaskResolution resolution = 7;
+}
+
+message CreateTaskResponse {
+  Task task = 1;
+}
+
+// Get Task Request/Response
+message GetTaskRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message GetTaskResponse {
+  Task task = 1;
+}
+
+// List Tasks Request/Response
+message ListTasksRequest {
+  optional string pipe_template_id = 1;
+  optional string material_id = 2;
+  jsonapi.v1.PaginationRequest pagination = 3;
+
+  // Filter parameters
+  repeated TaskStatus task_statuses = 4;
+  repeated TaskType task_types = 5;
+  optional string creator_search = 6; // Creator search (fuzzy search)
+  optional jsonapi.v1.TimeRange time_range = 7;
+  // Filter by task name (fuzzy/substring match).
+  optional string name = 8 [(buf.validate.field).string = {max_len: 255}];
+
+  // Sort options (when not specified, defaults to created_at DESC)
+  optional TaskSortField sort_by = 9;
+  optional TaskSortOrder sort_order = 10;
+}
+
+message ListTasksResponse {
+  repeated Task tasks = 1;
+  jsonapi.v1.PaginationResponse pagination = 2;
+}
+
+// Update Task Request/Response
+message UpdateTaskRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  optional string pipe_template_id = 2 [(buf.validate.field).string.uuid = true];
+  optional string material_id = 3 [(buf.validate.field).string.uuid = true];
+  optional google.protobuf.Struct data = 4;
+  optional string name = 5 [(buf.validate.field).string = {max_len: 255}];
+  // Task type (optional)
+  optional TaskType task_type = 6;
+  // Creator ID (optional)
+  optional string creator_id = 7;
+  // Task status (optional)
+  optional TaskStatus task_status = 8;
+  // Desired resolution for the task output (optional)
+  optional TaskResolution resolution = 9;
+}
+
+message UpdateTaskResponse {
+  Task task = 1;
+}
+
+// Delete Task Request/Response
+message DeleteTaskRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message DeleteTaskResponse {}
+
+// Create Status Request/Response
+message CreateStatusRequest {
+  string task_id = 1 [(buf.validate.field).string.uuid = true];
+  string status = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 100
+  }];
+  google.protobuf.Struct metadata = 3;
+}
+
+message CreateStatusResponse {
+  Status status = 1;
+}
+
+// Get Status Request/Response
+message GetStatusRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message GetStatusResponse {
+  Status status = 1;
+}
+
+// List Statuses Request/Response
+message ListStatusesRequest {
+  optional string task_id = 1;
+  optional string status = 2;
+  jsonapi.v1.PaginationRequest pagination = 3;
+}
+
+message ListStatusesResponse {
+  repeated Status statuses = 1;
+  jsonapi.v1.PaginationResponse pagination = 2;
+}
+
+// Update Status Request/Response
+message UpdateStatusRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  optional string status = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 100
+  }];
+  optional google.protobuf.Struct metadata = 3;
+}
+
+message UpdateStatusResponse {
+  Status status = 1;
+}
+
+// Delete Status Request/Response
+message DeleteStatusRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message DeleteStatusResponse {}
+
+// Terminate Task Instances Request/Response
+message TerminateTaskInstancesRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message TerminateTaskInstancesResponse {
+  repeated string terminated_instances = 1;
+  repeated string failed_instances = 2;
+  string message = 3;
+}
+
+message HeartbeatRequest {
+  string instance_id = 1 [(buf.validate.field).string.min_len = 1];
+  string status = 2 [(buf.validate.field).string.min_len = 1];
+  map<string, string> data = 3;
+}
+
+message HeartbeatResponse {
+  map<string, string> data = 1;
+}
+
+// Task stats messages
+message TaskStatusCount {
+  TaskStatus status = 1;
+  int32 count = 2;
+}
+
+message TaskTypeCount {
+  TaskType task_type = 1;
+  int32 count = 2;
+}
+
+message TaskDurationStats {
+  double avg_seconds = 1;
+  double min_seconds = 2;
+  double max_seconds = 3;
+  double median_seconds = 4;
+}
+
+message GetTaskStatsRequest {
+  google.protobuf.Timestamp start_time = 1 [(buf.validate.field).required = true];
+  google.protobuf.Timestamp end_time = 2 [(buf.validate.field).required = true];
+  TaskType task_type = 3 [(buf.validate.field) = {
+    required: true,
+    enum: {not_in: [0]}
+  }];
+}
+
+message GetTaskStatsResponse {
+  int32 total_count = 1;
+  repeated TaskStatusCount status_counts = 2;
+  repeated TaskTypeCount type_counts = 3;
+  double success_rate = 4;
+  TaskDurationStats duration_stats = 5;
+}
+
+// Task Service (includes Status operations)
+service TaskService {
+  // Task operations
+  rpc CreateTask(CreateTaskRequest) returns (CreateTaskResponse) {
+    option (google.api.http) = {
+      post: "/v1/console/tasks"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  rpc GetTask(GetTaskRequest) returns (GetTaskResponse) {
+    option (google.api.http) = {get: "/v1/console/tasks/{id}"};
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  rpc ListTasks(ListTasksRequest) returns (ListTasksResponse) {
+    option (google.api.http) = {get: "/v1/console/tasks"};
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  rpc UpdateTask(UpdateTaskRequest) returns (UpdateTaskResponse) {
+    option (google.api.http) = {
+      put: "/v1/console/tasks/{id}"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  rpc DeleteTask(DeleteTaskRequest) returns (DeleteTaskResponse) {
+    option (google.api.http) = {delete: "/v1/console/tasks/{id}"};
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  // Status operations
+  rpc CreateStatus(CreateStatusRequest) returns (CreateStatusResponse) {
+    option (google.api.http) = {
+      post: "/v1/console/statuses"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  rpc GetStatus(GetStatusRequest) returns (GetStatusResponse) {
+    option (google.api.http) = {get: "/v1/console/statuses/{id}"};
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  rpc ListStatuses(ListStatusesRequest) returns (ListStatusesResponse) {
+    option (google.api.http) = {get: "/v1/console/statuses"};
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  rpc UpdateStatus(UpdateStatusRequest) returns (UpdateStatusResponse) {
+    option (google.api.http) = {
+      put: "/v1/console/statuses/{id}"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  rpc DeleteStatus(DeleteStatusRequest) returns (DeleteStatusResponse) {
+    option (google.api.http) = {delete: "/v1/console/statuses/{id}"};
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  // Terminate task instances
+  rpc TerminateTaskInstances(TerminateTaskInstancesRequest) returns (TerminateTaskInstancesResponse) {
+    option (google.api.http) = {
+      post: "/v1/console/tasks/{id}/terminate"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  // Get task statistics
+  rpc GetTaskStats(GetTaskStatsRequest) returns (GetTaskStatsResponse) {
+    option (google.api.http) = {get: "/v1/console/tasks/stats"};
+    option (jsonapi.v1.requires_login) = true;
+  }
+}
+
+service TaskHeartbeatService {
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse) {
+    option (google.api.http) = {
+      post: "/v1/task-heartbeat/{instance_id}"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = false;
+  }
+}

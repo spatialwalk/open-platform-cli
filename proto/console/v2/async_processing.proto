@@ -1,0 +1,141 @@
+syntax = "proto3";
+
+package console.v2;
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/struct.proto";
+import "console/v1/task.proto";
+import "jsonapi/v1/base.proto";
+
+option go_package = "github.com/spatialwalk/backend-ng/api/generated/console/v2";
+
+// Material generation breath mode
+enum MaterialGenerationBreathMode {
+  MATERIAL_GENERATION_BREATH_MODE_UNSPECIFIED = 0;
+  // Old pipeline: WAN I2V prompt-based breathing
+  MATERIAL_GENERATION_BREATH_MODE_PROMPT = 1;
+  // New pipeline: Kling motion-control based breathing
+  MATERIAL_GENERATION_BREATH_MODE_MOTION_CONTROL = 2;
+}
+
+// FaceFlow pipeline version for MATERIAL_GENERATION tasks.
+// UNSPECIFIED or V1 uses the legacy WAN I2V pipeline;
+// V2_x versions delegate to CF Workers.
+enum FaceFlowVersion {
+  FACEFLOW_VERSION_UNSPECIFIED = 0;
+  // Legacy WAN I2V pipeline
+  FACEFLOW_VERSION_V1 = 1;
+  // CF Workers v2.0: WAN 2.5 audio-driven
+  FACEFLOW_VERSION_V2_0 = 2;
+  // CF Workers v2.2: Kling MC breathing + Gemini/Kling V3 head-up + HeyGen AV4 talking
+  FACEFLOW_VERSION_V2_2 = 4;
+}
+
+// AI Adjust Material Async Request/Response
+// 异步处理素材调整，不写表，只做计算处理，通过回调返回结果
+message AdjustMaterialAsyncRequest {
+  // Material 的 URL（因为国内 Console 无法查询 Material 表）
+  string material_url = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+  
+  // 回调地址
+  string callback_url = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+  
+  // 回调数据（包含业务上下文信息，如 apply_id、stage 等）
+  map<string, string> callback_data = 3;
+}
+
+message AdjustMaterialAsyncResponse {
+  bool success = 1;
+  // 返回 WAN 任务 ID（可选，用于追踪）
+  optional string wan_task_id = 2;
+}
+
+// Create Task Async Request/Response
+// 异步创建任务（视频生成或重建任务），不写表，只做计算处理，通过回调返回结果
+message CreateTaskAsyncRequest {
+  // Material 的 URL（因为国内 Console 无法查询 Material 表）
+  string material_url = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+  
+  // 任务类型
+  console.v1.TaskType task_type = 2 [(buf.validate.field).enum.defined_only = true];
+  
+  // 分辨率（仅用于 MATERIAL_GENERATION 类型）
+  optional console.v1.TaskResolution resolution = 3;
+  
+  // Pipe Template ID（仅用于 RECONSTRUCTION 类型）
+  optional string pipe_template_id = 4 [(buf.validate.field).string.uuid = true];
+  
+  // 任务参数（包含 train_person_name 等，仅用于 RECONSTRUCTION 类型）
+  google.protobuf.Struct task_data = 5;
+  
+  // 回调地址
+  string callback_url = 6 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+  
+  // 回调数据（包含业务上下文信息，如 apply_id、stage 等）
+  map<string, string> callback_data = 7;
+  
+  // 任务名称（可选）
+  optional string name = 8 [(buf.validate.field).string = {max_len: 255}];
+
+  // 呼吸态生成模式（仅用于 MATERIAL_GENERATION 类型；未填则使用默认旧管线）
+  optional MaterialGenerationBreathMode breath_mode = 9 [(buf.validate.field).enum.defined_only = true];
+
+  // Kling motion-control 的预设视频 ID（仅用于：
+  // 1) TASK_TYPE_KLING_MOTION_CONTROL；或
+  // 2) MATERIAL_GENERATION 且 breath_mode=MOTION_CONTROL
+  // Deprecated: use kling_motion_video_url instead.
+  optional string kling_motion_video_id = 10 [(buf.validate.field).string = {max_len: 128}];
+
+  // Kling motion-control 的视频 URL（仅用于：
+  // 1) TASK_TYPE_KLING_MOTION_CONTROL；或
+  // 2) MATERIAL_GENERATION 且 breath_mode=MOTION_CONTROL
+  optional string kling_motion_video_url = 11 [(buf.validate.field).string = {max_len: 500}];
+
+  // FaceFlow 管线版本（仅用于 MATERIAL_GENERATION 类型）
+  // 不填或 V1 走旧 WAN I2V 管线，V2_x 走 CF Workers
+  optional FaceFlowVersion faceflow_version = 12 [(buf.validate.field).enum.defined_only = true];
+
+  // V2 预设 ID（仅用于 faceflow_version 为 V2_x 时），默认 1
+  optional int32 v2_preset_id = 13;
+}
+
+message CreateTaskAsyncResponse {
+  bool success = 1;
+  // 返回 Console Task ID（用于追踪，但不会在调用方写表）
+  optional string task_id = 2;
+}
+
+// Async Processing Service
+// 异步处理服务，提供纯计算能力，不写表，通过回调返回结果
+service AsyncProcessingService {
+  // AI 素材调整（不写表，只做计算处理）
+  rpc AdjustMaterialAsync(AdjustMaterialAsyncRequest) returns (AdjustMaterialAsyncResponse) {
+    option (google.api.http) = {
+      post: "/v2/console/async-processing/adjust-material"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = false;
+  }
+  
+  // 创建异步任务（视频生成或重建任务，不写表，只做计算处理）
+  rpc CreateTaskAsync(CreateTaskAsyncRequest) returns (CreateTaskAsyncResponse) {
+    option (google.api.http) = {
+      post: "/v2/console/async-processing/create-task"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = false;
+  }
+}

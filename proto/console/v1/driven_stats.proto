@@ -1,0 +1,216 @@
+syntax = "proto3";
+
+package console.v1;
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "jsonapi/v1/base.proto";
+
+option go_package = "github.com/spatialwalk/backend-ng/api/generated/console/v1";
+
+// Granularity for usage statistics
+enum StatsGranularity {
+  STATS_GRANULARITY_UNSPECIFIED = 0;
+  STATS_GRANULARITY_MINUTE = 1;
+  STATS_GRANULARITY_HOUR = 2;
+  STATS_GRANULARITY_DAY = 3;
+}
+
+// UsageStatsItem represents a single usage statistics record
+message UsageStatsItem {
+  // Region identifier (e.g., "bj", "tyo", "sv")
+  string region = 1 [(buf.validate.field).string.min_len = 1];
+
+  // App ID (optional, empty for global stats)
+  string app_id = 2;
+
+  // User ID (optional, empty for global or app-level stats)
+  string user_id = 3 [(buf.validate.field).string.uuid = true, (buf.validate.field).ignore = IGNORE_IF_UNPOPULATED];
+
+  // Time granularity
+  StatsGranularity granularity = 4 [(buf.validate.field).enum = {
+    not_in: [0]
+  }];
+
+  // Period start time
+  google.protobuf.Timestamp period_start = 5 [(buf.validate.field).required = true];
+
+  // Period end time
+  google.protobuf.Timestamp period_end = 6 [(buf.validate.field).required = true];
+
+  // Audio duration in milliseconds
+  int64 audio_duration_ms = 7;
+
+  // Number of requests
+  int64 request_count = 8;
+
+  // WebSocket connection duration in milliseconds
+  int64 connection_duration_ms = 9;
+}
+
+// ConcurrencySnapshotItem represents a single concurrency snapshot record
+message ConcurrencySnapshotItem {
+  // Region identifier (e.g., "bj", "tyo", "sv")
+  string region = 1 [(buf.validate.field).string.min_len = 1];
+
+  // App ID (optional, empty for global snapshot)
+  string app_id = 2;
+
+  // User ID (optional, empty for global or app-level snapshot)
+  string user_id = 3 [(buf.validate.field).string.uuid = true, (buf.validate.field).ignore = IGNORE_IF_UNPOPULATED];
+
+  // Number of concurrent connections at snapshot time
+  int32 concurrent_connections = 4;
+
+  // Snapshot timestamp
+  google.protobuf.Timestamp snapshot_at = 5 [(buf.validate.field).required = true];
+}
+
+// SyncDrivenStatsRequest is the request for syncing driven ingress stats from remote regions
+message SyncDrivenStatsRequest {
+  // Usage statistics to sync
+  repeated UsageStatsItem usage_stats = 1;
+
+  // Concurrency snapshots to sync
+  repeated ConcurrencySnapshotItem concurrency_snapshots = 2;
+}
+
+// SyncDrivenStatsResponse is the response for SyncDrivenStats
+message SyncDrivenStatsResponse {
+  // Number of usage stats records synced
+  int32 usage_stats_synced = 1;
+
+  // Number of concurrency snapshots synced
+  int32 concurrency_snapshots_synced = 2;
+}
+
+// ============ Real-time stats for cross-region aggregation ============
+
+// RealtimeUsageStats contains real-time usage statistics
+message RealtimeUsageStats {
+  // Today's total audio duration in milliseconds
+  int64 today_ms = 1;
+
+  // Current hour's audio duration in milliseconds
+  int64 current_hour_ms = 2;
+
+  // Current minute's audio duration in milliseconds
+  int64 current_minute_ms = 3;
+
+  // Today's total connection duration in milliseconds
+  int64 today_connection_ms = 4;
+
+  // Current hour's connection duration in milliseconds
+  int64 current_hour_connection_ms = 5;
+
+  // Current minute's connection duration in milliseconds
+  int64 current_minute_connection_ms = 6;
+}
+
+// GetRegionStatsRequest is the request for getting local region's real-time stats
+// This endpoint is called by other regions' Console to fetch this region's stats
+message GetRegionStatsRequest {
+  // Dimension to query: "global", "app", or "user"
+  string dimension = 1 [(buf.validate.field).string = {in: ["global", "app", "user"]}];
+
+  // ID of the dimension (app_id or user_id)
+  // Required when dimension is "app" or "user", ignored when dimension is "global"
+  string id = 2;
+}
+
+// GetRegionStatsResponse is the response for GetRegionStats
+message GetRegionStatsResponse {
+  // Region identifier (e.g., "bj", "tyo", "sv")
+  string region = 1;
+
+  // The dimension queried
+  string dimension = 2;
+
+  // The ID queried (empty for global)
+  string id = 3;
+
+  // Current number of concurrent connections
+  int64 concurrency = 4;
+
+  // Real-time usage statistics
+  RealtimeUsageStats usage = 5;
+}
+
+// RegionStatsItem represents stats from a single region
+message RegionStatsItem {
+  // Region identifier (e.g., "bj", "tyo", "sv")
+  string region = 1;
+
+  // Current number of concurrent connections
+  int64 concurrency = 2;
+
+  // Real-time usage statistics
+  RealtimeUsageStats usage = 3;
+
+  // Whether this region's data was successfully fetched
+  bool available = 4;
+
+  // Error message if the region's data was not available
+  string error = 5;
+}
+
+// GetAllRegionsStatsRequest is the request for getting aggregated stats from all regions
+// This endpoint is only available on the primary Console (SV)
+message GetAllRegionsStatsRequest {
+  // Dimension to query: "global", "app", or "user"
+  string dimension = 1 [(buf.validate.field).string = {in: ["global", "app", "user"]}];
+
+  // ID of the dimension (app_id or user_id)
+  // Required when dimension is "app" or "user", ignored when dimension is "global"
+  string id = 2;
+}
+
+// GetAllRegionsStatsResponse is the response for GetAllRegionsStats
+message GetAllRegionsStatsResponse {
+  // The dimension queried
+  string dimension = 1;
+
+  // The ID queried (empty for global)
+  string id = 2;
+
+  // Stats from each region
+  repeated RegionStatsItem regions = 3;
+
+  // Aggregated total concurrency across all available regions
+  int64 total_concurrency = 4;
+
+  // Aggregated total usage across all available regions
+  RealtimeUsageStats total_usage = 5;
+}
+
+// DrivenStatsService provides methods for syncing and querying driven ingress statistics
+service DrivenStatsService {
+  // SyncDrivenStats syncs usage and concurrency stats from remote regions to the primary database
+  // This endpoint is called by remote region backup jobs
+  rpc SyncDrivenStats(SyncDrivenStatsRequest) returns (SyncDrivenStatsResponse) {
+    option (google.api.http) = {
+      post: "/v1/internal/driven-stats/sync"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  // GetRegionStats returns this region's real-time stats from local driven-ingress
+  // Called by other regions' Console to fetch local stats
+  rpc GetRegionStats(GetRegionStatsRequest) returns (GetRegionStatsResponse) {
+    option (google.api.http) = {
+      get: "/v1/internal/driven-stats/region"
+    };
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  // GetAllRegionsStats returns aggregated real-time stats from all regions
+  // Only available on the primary Console (SV), aggregates data from BJ, TYO, SV
+  rpc GetAllRegionsStats(GetAllRegionsStatsRequest) returns (GetAllRegionsStatsResponse) {
+    option (google.api.http) = {
+      get: "/v1/admin/driven-stats/all-regions"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+}

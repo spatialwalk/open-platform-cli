@@ -1,0 +1,290 @@
+syntax = "proto3";
+
+package console.v1;
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "jsonapi/v1/base.proto";
+
+option go_package = "github.com/spatialwalk/backend-ng/api/generated/console/v1";
+
+// CollectionTask status enumeration
+enum CollectionTaskStatus {
+  COLLECTION_TASK_STATUS_UNSPECIFIED = 0;
+  COLLECTION_TASK_STATUS_PENDING = 1;
+  COLLECTION_TASK_STATUS_COMPLETED = 2;
+  COLLECTION_TASK_STATUS_FAILED = 3;
+}
+
+// CollectionTask entity
+message CollectionTask {
+  // Unique identifier for the collection task
+  string id = 1;
+  // Collection task name
+  string name = 2;
+  // Collection description
+  string description = 3;
+  // Share token for collection link
+  string share_token = 4;
+  // Task expiration time
+  google.protobuf.Timestamp expires_at = 5;
+  // Whether the task has been used
+  bool is_used = 6;
+  // Creator ID (optional, no foreign key relation)
+  string creator_id = 7;
+  // Task status
+  CollectionTaskStatus status = 8;
+  // Associated material ID (generated after success)
+  optional string material_id = 9;
+  // Failure reason (recorded when status is failed)
+  optional string failure_reason = 10;
+  // Timestamp when the task was created
+  google.protobuf.Timestamp created_at = 11;
+  // Timestamp when the task was last updated
+  google.protobuf.Timestamp updated_at = 12;
+}
+
+// Create CollectionTask Request/Response
+message CreateCollectionTaskRequest {
+  string name = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 255
+  }];
+  string description = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 1000
+  }];
+  // Optional expiration time (defaults to 7 days from now if not provided)
+  optional google.protobuf.Timestamp expires_at = 3;
+  // Creator ID (injected by platform layer)
+  optional string creator_id = 4;
+  optional string user_phone = 5;
+}
+
+message CreateCollectionTaskResponse {
+  CollectionTask collection_task = 1;
+  // Complete share URL for collection
+  string share_url = 2;
+}
+
+// Get CollectionTask Request/Response
+message GetCollectionTaskRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message GetCollectionTaskResponse {
+  CollectionTask collection_task = 1;
+  // Complete share URL for collection
+  string share_url = 2;
+}
+
+// List CollectionTasks Request/Response
+message ListCollectionTasksRequest {
+  jsonapi.v1.PaginationRequest pagination = 1;
+
+  // Filter parameters
+  repeated CollectionTaskStatus collection_task_statuses = 2;
+  optional string name_search = 3;
+  repeated string creator_ids = 4;
+  optional jsonapi.v1.TimeRange time_range = 5;
+  optional jsonapi.v1.TimeRange expires_time_range = 6;
+}
+
+message ListCollectionTasksResponse {
+  repeated CollectionTask collection_tasks = 1;
+  jsonapi.v1.PaginationResponse pagination = 2;
+}
+
+// Update CollectionTask Request/Response
+message UpdateCollectionTaskRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  optional string name = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 255
+  }];
+  optional string description = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 1000
+  }];
+}
+
+message UpdateCollectionTaskResponse {
+  CollectionTask collection_task = 1;
+  // Complete share URL for collection
+  string share_url = 2;
+}
+
+// Delete CollectionTask Request/Response
+message DeleteCollectionTaskRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message DeleteCollectionTaskResponse {}
+
+// GetCollectionTaskByToken Request/Response (public endpoint)
+message GetCollectionTaskByTokenRequest {
+  // Share token (acts as temporary API key)
+  string token = 1 [(buf.validate.field).string = {
+    min_len: 32
+    max_len: 128
+  }];
+}
+
+message GetCollectionTaskByTokenResponse {
+  CollectionTask collection_task = 1;
+}
+
+// GetCollectionTaskOSSCredentials Request (public endpoint)
+message GetCollectionTaskOSSCredentialsRequest {
+  // Share token for authentication
+  string token = 1 [(buf.validate.field).string = {
+    min_len: 32
+    max_len: 128
+  }];
+
+  // Resource path to upload (must start with 'video/collection_')
+  // Example: video/collection_1234567890_abc.mp4
+  string resource_path = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 512
+    pattern: "^video/collection_.+"
+  }];
+
+  // Credential duration in seconds (default 3600)
+  optional int64 duration_seconds = 3 [(buf.validate.field).int64 = {
+    gte: 60
+    lte: 3600
+  }];
+}
+
+// GetCollectionTaskOSSCredentials Response (public endpoint)
+// Fields are identical to GetOSSCredentialsResponse for consistency
+message GetCollectionTaskOSSCredentialsResponse {
+  // Temporary access key ID
+  string access_key_id = 1;
+  // Temporary secret access key
+  string secret_access_key = 2;
+  // Security token (STS Token)
+  string session_token = 3;
+  // Credential expiration time (Unix timestamp in seconds)
+  int64 expiration = 4;
+  // OSS region (e.g., ap-beijing, ap-guangzhou)
+  string region = 5;
+  // OSS bucket name
+  string bucket_name = 6;
+  // OSS provider (e.g., cos, r2)
+  string provider = 7;
+  // Base URL for accessing files
+  string base_url = 8;
+  // Account ID (for some providers like R2)
+  string account_id = 9;
+}
+
+// SubmitCollectionFile Request/Response (public endpoint)
+message SubmitCollectionFileRequest {
+  // Share token
+  string token = 1 [(buf.validate.field).string = {
+    min_len: 32
+    max_len: 128
+  }];
+
+  // Complete file URL (uploaded by frontend to COS)
+  string file_url = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 1024
+    pattern: "^https?://.+"
+  }];
+
+  // File type: "video" or "image"
+  string file_type = 3 [(buf.validate.field).string = {
+    in: [
+      "video",
+      "image"
+    ]
+  }];
+
+  // R2 key (file path in COS)
+  // Example: video/collection_1734567890_abc.mp4
+  string r2_key = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 512
+    pattern: "^video/collection_.+"
+  }];
+
+  // Video metadata (optional, extracted from local recording)
+  optional int32 duration = 5 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 86400
+  }];
+
+  optional string resolution = 6 [(buf.validate.field).string = {max_len: 50}];
+
+  optional int64 file_size = 7 [(buf.validate.field).int64 = {gte: 0}];
+}
+
+message SubmitCollectionFileResponse {
+  string material_id = 1;
+  string message = 2;
+}
+
+// CollectionTask Service
+service CollectionTaskService {
+  // CollectionTask operations
+  rpc CreateCollectionTask(CreateCollectionTaskRequest) returns (CreateCollectionTaskResponse) {
+    option (google.api.http) = {
+      post: "/v1/console/collection-tasks"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  rpc GetCollectionTask(GetCollectionTaskRequest) returns (GetCollectionTaskResponse) {
+    option (google.api.http) = {get: "/v1/console/collection-tasks/{id}"};
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  rpc ListCollectionTasks(ListCollectionTasksRequest) returns (ListCollectionTasksResponse) {
+    option (google.api.http) = {get: "/v1/console/collection-tasks"};
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  rpc UpdateCollectionTask(UpdateCollectionTaskRequest) returns (UpdateCollectionTaskResponse) {
+    option (google.api.http) = {
+      put: "/v1/console/collection-tasks/{id}"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  rpc DeleteCollectionTask(DeleteCollectionTaskRequest) returns (DeleteCollectionTaskResponse) {
+    option (google.api.http) = {delete: "/v1/console/collection-tasks/{id}"};
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  // ===== Public endpoints (no login required) =====
+
+  // Get collection task by share token
+  rpc GetCollectionTaskByToken(GetCollectionTaskByTokenRequest) returns (GetCollectionTaskByTokenResponse) {
+    option (google.api.http) = {get: "/v1/public/collection-tasks/{token}"};
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  // Get OSS credentials for file upload
+  rpc GetCollectionTaskOSSCredentials(GetCollectionTaskOSSCredentialsRequest) returns (GetCollectionTaskOSSCredentialsResponse) {
+    option (google.api.http) = {
+      post: "/v1/public/collection-tasks/{token}/oss-credentials"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  // Submit uploaded file and create material
+  rpc SubmitCollectionFile(SubmitCollectionFileRequest) returns (SubmitCollectionFileResponse) {
+    option (google.api.http) = {
+      post: "/v1/public/collection-tasks/{token}/submit"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = false;
+  }
+}

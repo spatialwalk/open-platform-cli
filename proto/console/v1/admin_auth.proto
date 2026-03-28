@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package console.v1;
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "jsonapi/v1/base.proto";
+
+option go_package = "github.com/spatialwalk/backend-ng/api/generated/console/v1";
+
+// Admin User entity
+message AdminUser {
+  // UUID of the admin user
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // Admin email address (unique, required)
+  string email = 2 [(buf.validate.field).string.email = true];
+  // Timestamp when the admin user was created
+  google.protobuf.Timestamp created_at = 3;
+  // Timestamp when the admin user was last updated
+  google.protobuf.Timestamp updated_at = 4;
+  // Timestamp when the admin user was deleted (soft delete)
+  optional google.protobuf.Timestamp deleted_at = 5;
+}
+
+// Login with email and password
+message AdminLoginRequest {
+  // Admin email
+  string email = 1 [(buf.validate.field).required = true, (buf.validate.field).string.email = true];
+  // Admin password
+  string password = 2 [(buf.validate.field).required = true];
+}
+
+message AdminLoginResponse {
+  // Admin user information
+  AdminUser admin_user = 1;
+  // JWT token for authentication
+  string token = 2;
+}
+
+// Change password
+message AdminChangePasswordRequest {
+  // Old password
+  string old_password = 1 [(buf.validate.field).required = true];
+  // New password (min 8 characters)
+  string new_password = 2 [(buf.validate.field).required = true, (buf.validate.field).string.min_len = 8];
+}
+
+message AdminChangePasswordResponse {}
+
+// AdminAuthService provides authentication for admin users
+service AdminAuthService {
+  // Login with email and password
+  rpc Login(AdminLoginRequest) returns (AdminLoginResponse) {
+    option (google.api.http) = {
+      post: "/v1/admin/auth/login"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  // Change password
+  rpc ChangePassword(AdminChangePasswordRequest) returns (AdminChangePasswordResponse) {
+    option (google.api.http) = {
+      post: "/v1/admin/auth/change-password"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+}
+

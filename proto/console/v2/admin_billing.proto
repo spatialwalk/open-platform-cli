@@ -1,0 +1,382 @@
+syntax = "proto3";
+
+package console.v2;
+
+import "buf/validate/validate.proto";
+import "console/v2/billing.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "jsonapi/v1/base.proto";
+
+option go_package = "github.com/spatialwalk/backend-ng/api/generated/console/v2";
+
+// ============================================================================
+// AdminBillingService - Admin APIs
+// ============================================================================
+
+// 管理员订阅计划（包含额外字段）
+message AdminSubscriptionPlan {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  BillingPeriod billing_period = 4;
+  int64 price_cents = 5;
+  int64 monthly_credits = 6;
+  int32 max_concurrent_connections = 7;
+  int32 max_session_duration_minutes = 8;
+  repeated string features = 9;
+  bool is_free = 10;                // 是否为免费计划
+  bool is_unlimited = 16;           // 是否为不限量计划（跳过 credit 扣减）
+  int32 sort_order = 11;
+  optional string stripe_product_id = 12;
+  optional string stripe_price_id = 13;
+  google.protobuf.Timestamp created_at = 14;
+  google.protobuf.Timestamp updated_at = 15;
+}
+
+// 管理员用户订阅视图（包含用户信息）
+message AdminUserSubscription {
+  string id = 1;
+  string user_id = 2;
+  string user_email = 3;
+  string user_nickname = 4;
+  string plan_id = 5;
+  AdminSubscriptionPlan plan = 6;
+  SubscriptionStatus status = 7;
+  optional string stripe_customer_id = 8;
+  optional string stripe_subscription_id = 9;
+  google.protobuf.Timestamp current_period_start = 10;
+  google.protobuf.Timestamp current_period_end = 11;
+  optional string scheduled_plan_id = 12;
+  optional google.protobuf.Timestamp scheduled_change_at = 13;
+  optional google.protobuf.Timestamp canceled_at = 14;
+  google.protobuf.Timestamp created_at = 15;
+  google.protobuf.Timestamp updated_at = 16;
+}
+
+// ============================================================================
+// Plan Management
+// ============================================================================
+
+// 获取计划列表
+message AdminListPlansRequest {
+  bool include_inactive = 1;  // 是否包含已禁用的计划
+}
+
+message AdminListPlansResponse {
+  repeated AdminSubscriptionPlan plans = 1;
+}
+
+// 获取单个计划
+message AdminGetPlanRequest {
+  string plan_id = 1 [(buf.validate.field).required = true];
+}
+
+message AdminGetPlanResponse {
+  AdminSubscriptionPlan plan = 1;
+}
+
+// 创建计划
+message AdminCreatePlanRequest {
+  string name = 1 [(buf.validate.field).required = true];
+  optional string description = 2;
+  BillingPeriod billing_period = 3 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  int64 price_cents = 4;
+  int64 monthly_credits = 5;
+  int32 max_concurrent_connections = 6;
+  int32 max_session_duration_minutes = 7;
+  repeated string features = 8;
+  optional string stripe_product_id = 9;
+  optional string stripe_price_id = 10;
+  bool is_free = 11;               // 是否为免费计划
+  int32 sort_order = 12;
+  bool is_unlimited = 13;          // 是否为不限量计划（跳过 credit 扣减）
+}
+
+message AdminCreatePlanResponse {
+  AdminSubscriptionPlan plan = 1;
+}
+
+// 更新计划
+message AdminUpdatePlanRequest {
+  string plan_id = 1 [(buf.validate.field).required = true];
+  optional string name = 2;
+  optional string description = 3;
+  optional int64 price_cents = 4;
+  optional int64 monthly_credits = 5;
+  optional int32 max_concurrent_connections = 6;
+  optional int32 max_session_duration_minutes = 7;
+  repeated string features = 8;
+  optional string stripe_product_id = 9;
+  optional string stripe_price_id = 10;
+  optional bool is_free = 11;      // 是否为免费计划
+  optional int32 sort_order = 12;
+  optional bool is_unlimited = 13; // 是否为不限量计划（跳过 credit 扣减）
+}
+
+message AdminUpdatePlanResponse {
+  AdminSubscriptionPlan plan = 1;
+}
+
+// 删除计划（软删除）
+message AdminDeletePlanRequest {
+  string plan_id = 1 [(buf.validate.field).required = true];
+}
+
+message AdminDeletePlanResponse {}
+
+// ============================================================================
+// Subscription Management
+// ============================================================================
+
+// 获取订阅列表
+message AdminListSubscriptionsRequest {
+  optional jsonapi.v1.PaginationRequest pagination = 1;
+  optional SubscriptionStatus status = 2;
+  optional string user_id = 3;
+  optional string user_email = 4;  // 模糊搜索
+  optional string plan_id = 5;      // 按计划ID筛选
+}
+
+message AdminListSubscriptionsResponse {
+  repeated AdminUserSubscription subscriptions = 1;
+  jsonapi.v1.PaginationResponse pagination = 2;
+}
+
+// 获取用户订阅详情
+message AdminGetUserSubscriptionRequest {
+  string user_id = 1 [(buf.validate.field).required = true];
+}
+
+message AdminGetUserSubscriptionResponse {
+  AdminUserSubscription subscription = 1;
+  CreditBalance credit_balance = 2;
+}
+
+// 更新用户订阅（管理员强制变更）
+message AdminUpdateUserSubscriptionRequest {
+  string user_id = 1 [(buf.validate.field).required = true];
+  optional string plan_id = 2;
+  optional SubscriptionStatus status = 3;
+}
+
+message AdminUpdateUserSubscriptionResponse {
+  AdminUserSubscription subscription = 1;
+}
+
+// ============================================================================
+// Credits Management
+// ============================================================================
+
+// 赠送 Credits
+message AdminGrantCreditsRequest {
+  string user_id = 1 [(buf.validate.field).required = true];
+  int64 amount = 2 [(buf.validate.field).int64.gt = 0];
+  optional string description = 3;
+}
+
+message AdminGrantCreditsResponse {
+  CreditBalance balance = 1;
+  CreditTransaction transaction = 2;
+}
+
+// 扣减 Credits（用于退款、调整等）
+message AdminDeductCreditsRequest {
+  string user_id = 1 [(buf.validate.field).required = true];
+  int64 amount = 2 [(buf.validate.field).int64.gt = 0];
+  optional string description = 3;
+}
+
+message AdminDeductCreditsResponse {
+  CreditBalance balance = 1;
+  CreditTransaction transaction = 2;
+}
+
+// 获取用户 Credits 余额
+message AdminGetUserCreditBalanceRequest {
+  string user_id = 1 [(buf.validate.field).required = true];
+}
+
+message AdminGetUserCreditBalanceResponse {
+  CreditBalance balance = 1;
+}
+
+// 获取用户 Credits 交易记录
+message AdminListUserCreditTransactionsRequest {
+  string user_id = 1 [(buf.validate.field).required = true];
+  optional jsonapi.v1.PaginationRequest pagination = 2;
+  optional CreditTransactionType type = 3;
+}
+
+message AdminListUserCreditTransactionsResponse {
+  repeated CreditTransaction transactions = 1;
+  jsonapi.v1.PaginationResponse pagination = 2;
+}
+
+// 获取用户消费明细
+message AdminListUserCreditUsagesRequest {
+  string user_id = 1 [(buf.validate.field).required = true];
+  optional jsonapi.v1.PaginationRequest pagination = 2;
+  optional CreditUsageType usage_type = 3;
+  optional google.protobuf.Timestamp start_time = 4;
+  optional google.protobuf.Timestamp end_time = 5;
+}
+
+message AdminListUserCreditUsagesResponse {
+  repeated CreditUsage usages = 1;
+  jsonapi.v1.PaginationResponse pagination = 2;
+}
+
+// ============================================================================
+// Statistics
+// ============================================================================
+
+// 获取计费统计概览
+message AdminGetBillingStatsRequest {
+  optional google.protobuf.Timestamp start_time = 1;
+  optional google.protobuf.Timestamp end_time = 2;
+}
+
+message AdminGetBillingStatsResponse {
+  int32 total_subscriptions = 1;
+  int32 active_subscriptions = 2;
+  int64 total_credits_granted = 3;
+  int64 total_credits_consumed = 4;
+  int64 total_revenue_cents = 5;
+  // 按状态分组的订阅数
+  map<string, int32> subscriptions_by_status = 6;
+}
+
+// ============================================================================
+// AdminBillingService
+// ============================================================================
+
+service AdminBillingService {
+  // ==================== Plan Management ====================
+
+  // 获取所有订阅计划（包含非公开的）
+  rpc ListPlans(AdminListPlansRequest) returns (AdminListPlansResponse) {
+    option (google.api.http) = {
+      get: "/v2/admin/billing/plans"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // 获取单个订阅计划详情
+  rpc GetPlan(AdminGetPlanRequest) returns (AdminGetPlanResponse) {
+    option (google.api.http) = {
+      get: "/v2/admin/billing/plans/{plan_id}"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // 创建订阅计划
+  rpc CreatePlan(AdminCreatePlanRequest) returns (AdminCreatePlanResponse) {
+    option (google.api.http) = {
+      post: "/v2/admin/billing/plans"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // 更新订阅计划
+  rpc UpdatePlan(AdminUpdatePlanRequest) returns (AdminUpdatePlanResponse) {
+    option (google.api.http) = {
+      put: "/v2/admin/billing/plans/{plan_id}"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // 删除订阅计划（软删除）
+  rpc DeletePlan(AdminDeletePlanRequest) returns (AdminDeletePlanResponse) {
+    option (google.api.http) = {
+      delete: "/v2/admin/billing/plans/{plan_id}"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // ==================== Subscription Management ====================
+
+  // 获取所有用户订阅列表
+  rpc ListSubscriptions(AdminListSubscriptionsRequest) returns (AdminListSubscriptionsResponse) {
+    option (google.api.http) = {
+      get: "/v2/admin/billing/subscriptions"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // 获取指定用户的订阅信息
+  rpc GetUserSubscription(AdminGetUserSubscriptionRequest) returns (AdminGetUserSubscriptionResponse) {
+    option (google.api.http) = {
+      get: "/v2/admin/billing/users/{user_id}/subscription"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // 更新用户订阅（管理员强制变更）
+  rpc UpdateUserSubscription(AdminUpdateUserSubscriptionRequest) returns (AdminUpdateUserSubscriptionResponse) {
+    option (google.api.http) = {
+      put: "/v2/admin/billing/users/{user_id}/subscription"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // ==================== Credits Management ====================
+
+  // 赠送 Credits 给用户
+  rpc GrantCredits(AdminGrantCreditsRequest) returns (AdminGrantCreditsResponse) {
+    option (google.api.http) = {
+      post: "/v2/admin/billing/credits/grant"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // 扣减用户 Credits
+  rpc DeductCredits(AdminDeductCreditsRequest) returns (AdminDeductCreditsResponse) {
+    option (google.api.http) = {
+      post: "/v2/admin/billing/credits/deduct"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // 获取用户 Credits 余额
+  rpc GetUserCreditBalance(AdminGetUserCreditBalanceRequest) returns (AdminGetUserCreditBalanceResponse) {
+    option (google.api.http) = {
+      get: "/v2/admin/billing/users/{user_id}/credits"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // 获取用户 Credits 交易记录
+  rpc ListUserCreditTransactions(AdminListUserCreditTransactionsRequest) returns (AdminListUserCreditTransactionsResponse) {
+    option (google.api.http) = {
+      get: "/v2/admin/billing/users/{user_id}/credits/transactions"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // 获取用户消费明细
+  rpc ListUserCreditUsages(AdminListUserCreditUsagesRequest) returns (AdminListUserCreditUsagesResponse) {
+    option (google.api.http) = {
+      get: "/v2/admin/billing/users/{user_id}/credits/usages"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+
+  // ==================== Statistics ====================
+
+  // 获取计费统计概览
+  rpc GetBillingStats(AdminGetBillingStatsRequest) returns (AdminGetBillingStatsResponse) {
+    option (google.api.http) = {
+      get: "/v2/admin/billing/stats"
+    };
+    option (jsonapi.v1.requires_login) = true;
+  }
+}

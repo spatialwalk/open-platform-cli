@@ -1,0 +1,291 @@
+syntax = "proto3";
+
+package console.v1;
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "jsonapi/v1/base.proto";
+
+option go_package = "github.com/spatialwalk/backend-ng/api/generated/console/v1";
+
+// OAuth provider type
+enum OAuthProvider {
+  OAUTH_PROVIDER_UNSPECIFIED = 0;
+  OAUTH_PROVIDER_GITHUB = 1;
+  OAUTH_PROVIDER_GOOGLE = 2;
+}
+
+// Verification code type
+enum VerificationCodeType {
+  VERIFICATION_CODE_TYPE_UNSPECIFIED = 0;
+  VERIFICATION_CODE_TYPE_REGISTER = 1;      // For user registration
+  VERIFICATION_CODE_TYPE_RESET_PASSWORD = 2; // For password reset
+}
+
+// Console User entity
+message ConsoleUser {
+  // UUID of the user
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // User email (unique, optional for OAuth users)
+  optional string email = 2 [(buf.validate.field).string.email = true];
+  // Username (optional)
+  optional string username = 3 [(buf.validate.field).string = {
+    min_len: 2
+    max_len: 128
+  }];
+  // User nickname
+  optional string nickname = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
+  // Avatar URL
+  optional string avatar_url = 5;
+  // OAuth provider (if using OAuth login)
+  optional OAuthProvider oauth_provider = 6 [(buf.validate.field).enum.defined_only = true];
+  // OAuth user ID (unique per provider)
+  optional string oauth_id = 7;
+  // OAuth email
+  optional string oauth_email = 8 [(buf.validate.field).string.email = true];
+  // Timestamp when the user was created
+  google.protobuf.Timestamp created_at = 9;
+  // Timestamp when the user was last updated
+  google.protobuf.Timestamp updated_at = 10;
+  // Timestamp when the user last logged in
+  optional google.protobuf.Timestamp last_login_at = 11;
+  // Whether the user's email is verified
+  bool email_verified = 12;
+  // Whether the user can create characters
+  bool can_create_characters = 13;
+}
+
+// Register with email and password
+message RegisterRequest {
+  // User email
+  string email = 1 [(buf.validate.field).required = true, (buf.validate.field).string.email = true];
+  // User password (min 8 characters)
+  string password = 2 [(buf.validate.field).required = true, (buf.validate.field).string.min_len = 8];
+  // Optional username
+  optional string username = 3 [(buf.validate.field).string = {
+    min_len: 2
+    max_len: 128
+  }];
+  // Optional nickname
+  optional string nickname = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
+  // Cloudflare Turnstile token for bot verification (required)
+  string turnstile_token = 5 [(buf.validate.field).required = true];
+}
+
+message RegisterResponse {
+  // Created user
+  ConsoleUser user = 1;
+  // JWT token for authentication
+  string token = 2;
+}
+
+// Login with email and password
+message LoginRequest {
+  // User email
+  string email = 1 [(buf.validate.field).required = true, (buf.validate.field).string.email = true];
+  // User password
+  string password = 2 [(buf.validate.field).required = true];
+}
+
+message LoginResponse {
+  // User information
+  ConsoleUser user = 1;
+  // JWT token for authentication
+  string token = 2;
+}
+
+// OAuth login request
+message OAuthLoginRequest {
+  // OAuth provider
+  OAuthProvider provider = 1 [(buf.validate.field).required = true, (buf.validate.field).enum.defined_only = true];
+  // OAuth code or token (depending on provider)
+  string code = 2 [(buf.validate.field).required = true];
+  // Optional redirect URI
+  optional string redirect_uri = 3;
+}
+
+message OAuthLoginResponse {
+  // User information (created or existing)
+  ConsoleUser user = 1;
+  // JWT token for authentication
+  string token = 2;
+  // Whether this is a new user
+  bool is_new_user = 3;
+}
+
+// Get current user information
+message GetMeRequest {}
+
+message GetMeResponse {
+  // Current user information
+  ConsoleUser user = 1;
+}
+
+// Update user profile
+message UpdateProfileRequest {
+  // Optional username
+  optional string username = 1 [(buf.validate.field).string = {
+    min_len: 2
+    max_len: 128
+  }];
+  // Optional nickname
+  optional string nickname = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
+  // Optional avatar URL
+  optional string avatar_url = 3;
+}
+
+message UpdateProfileResponse {
+  // Updated user information
+  ConsoleUser user = 1;
+}
+
+// Change password
+message ChangePasswordRequest {
+  // Old password
+  string old_password = 1 [(buf.validate.field).required = true];
+  // New password (min 8 characters)
+  string new_password = 2 [(buf.validate.field).required = true, (buf.validate.field).string.min_len = 8];
+}
+
+message ChangePasswordResponse {}
+
+// Logout request
+message LogoutRequest {}
+
+message LogoutResponse {}
+
+// Request to send a verification code to an email address
+message SendVerificationCodeRequest {
+  VerificationCodeType type = 1 [(buf.validate.field).required = true, (buf.validate.field).enum.defined_only = true];
+  string email = 2 [(buf.validate.field).required = true, (buf.validate.field).string.email = true];
+}
+
+message SendVerificationCodeResponse {
+  string message = 1;
+  int32 expires_in = 2; // Code expiration in seconds
+}
+
+// Request to verify an email verification code
+message VerifyVerificationCodeRequest {
+  VerificationCodeType type = 1 [(buf.validate.field).required = true, (buf.validate.field).enum.defined_only = true];
+  string email = 2 [(buf.validate.field).required = true, (buf.validate.field).string.email = true];
+  string code = 3 [(buf.validate.field).required = true, (buf.validate.field).string.pattern = "^[0-9]{6}$"]; // 6-digit code
+}
+
+message VerifyVerificationCodeResponse {
+  bool verified = 1;
+  string message = 2;
+}
+
+// Request to reset password using verification code
+message ResetPasswordRequest {
+  // User email
+  string email = 1 [(buf.validate.field).required = true, (buf.validate.field).string.email = true];
+  // Verification code (6-digit)
+  string code = 2 [(buf.validate.field).required = true, (buf.validate.field).string.pattern = "^[0-9]{6}$"];
+  // New password (min 8 characters)
+  string new_password = 3 [(buf.validate.field).required = true, (buf.validate.field).string.min_len = 8];
+}
+
+message ResetPasswordResponse {
+  string message = 1;
+}
+
+// AuthService provides authentication and user management for console users
+service AuthService {
+  // Register a new user with email and password
+  rpc Register(RegisterRequest) returns (RegisterResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/register"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  // Login with email and password
+  rpc Login(LoginRequest) returns (LoginResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/login"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  // Login or register with OAuth
+  rpc OAuthLogin(OAuthLoginRequest) returns (OAuthLoginResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/oauth/login"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  // Get current user information
+  rpc GetMe(GetMeRequest) returns (GetMeResponse) {
+    option (google.api.http) = {
+      get: "/v1/auth/me"
+    };
+  }
+
+  // Update user profile
+  rpc UpdateProfile(UpdateProfileRequest) returns (UpdateProfileResponse) {
+    option (google.api.http) = {
+      put: "/v1/auth/profile"
+      body: "*"
+    };
+  }
+
+  // Change password
+  rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/change-password"
+      body: "*"
+    };
+  }
+
+  // Logout (optional, mainly for token invalidation)
+  rpc Logout(LogoutRequest) returns (LogoutResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/logout"
+      body: "*"
+    };
+  }
+
+  // Send an email verification code
+  rpc SendVerificationCode(SendVerificationCodeRequest) returns (SendVerificationCodeResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/verification-code/send"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  // Verify an email verification code
+  rpc VerifyVerificationCode(VerifyVerificationCodeRequest) returns (VerifyVerificationCodeResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/verification-code/verify"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = false;
+  }
+
+  // Reset password using verification code
+  rpc ResetPassword(ResetPasswordRequest) returns (ResetPasswordResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/password-reset/reset"
+      body: "*"
+    };
+    option (jsonapi.v1.requires_login) = false;
+  }
+}
+
