@@ -1,3 +1,3 @@
-module github.com/spatialwalk/open-platform-cli
+module github.com/spatialwalk/avtkit
 
 go 1.24.0

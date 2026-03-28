@@ -1,3 +1,3 @@
-# open-platform-cli
+# avtkit
 
-CLI for SpatialWalk open platform, implemented in Go.
+CLI for AvatarKit, implemented in Go.
