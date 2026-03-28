@@ -23,12 +23,13 @@ import (
 )
 
 const (
-	defaultLoginTimeout  = 5 * time.Minute
-	refreshSkew          = time.Minute
-	defaultClientName    = "avtkit"
-	callbackSuccessTitle = "Authorization complete"
-	callbackFailureTitle = "Authorization failed"
-	cliName              = "avtkit"
+	defaultLoginTimeout   = 5 * time.Minute
+	refreshSkew           = time.Minute
+	defaultClientName     = "avtkit"
+	defaultConsoleBaseURL = "https://api.openplatform.spatialwalk.cloud"
+	callbackSuccessTitle  = "Authorization complete"
+	callbackFailureTitle  = "Authorization failed"
+	cliName               = "avtkit"
 )
 
 type Streams struct {
@@ -59,13 +60,11 @@ func ExitCode(err error) int {
 
 type globalOptions struct {
 	BaseURL   string
-	Region    string
 	ConfigDir string
 }
 
 type resolvedOptions struct {
 	BaseURL string
-	Region  string
 }
 
 type loginOptions struct {
@@ -114,18 +113,16 @@ type app struct {
 func (a *app) run(ctx context.Context, args []string) error {
 	global := globalOptions{
 		BaseURL:   strings.TrimSpace(os.Getenv("AVTKIT_CONSOLE_BASE_URL")),
-		Region:    strings.TrimSpace(os.Getenv("AVTKIT_REGION")),
 		ConfigDir: strings.TrimSpace(os.Getenv("AVTKIT_CONFIG_DIR")),
 	}
 
 	fs := flag.NewFlagSet(cliName, flag.ContinueOnError)
 	fs.SetOutput(a.streams.Stderr)
 	fs.StringVar(&global.BaseURL, "base-url", global.BaseURL, "Console API base URL")
-	fs.StringVar(&global.Region, "region", global.Region, "Region to use (cn, us, test, dev)")
 	fs.StringVar(&global.ConfigDir, "config-dir", global.ConfigDir, "Override CLI config directory")
 	fs.Usage = func() {
 		fmt.Fprintln(a.streams.Stderr, "Usage:")
-		fmt.Fprintf(a.streams.Stderr, "  %s [--base-url URL] [--region NAME] [--config-dir DIR] <command>\n", cliName)
+		fmt.Fprintf(a.streams.Stderr, "  %s [--base-url URL] [--config-dir DIR] <command>\n", cliName)
 		fmt.Fprintln(a.streams.Stderr)
 		fmt.Fprintln(a.streams.Stderr, "Commands:")
 		fmt.Fprintln(a.streams.Stderr, "  login            Sign in with the browser-based CLI auth flow")
@@ -135,7 +132,6 @@ func (a *app) run(ctx context.Context, args []string) error {
 		fmt.Fprintln(a.streams.Stderr)
 		fmt.Fprintln(a.streams.Stderr, "Environment:")
 		fmt.Fprintln(a.streams.Stderr, "  AVTKIT_CONSOLE_BASE_URL overrides the API base URL")
-		fmt.Fprintln(a.streams.Stderr, "  AVTKIT_REGION selects the default region")
 		fmt.Fprintln(a.streams.Stderr, "  AVTKIT_CONFIG_DIR overrides the config directory")
 	}
 
@@ -265,7 +261,6 @@ func (a *app) runStatus(ctx context.Context, global globalOptions, args []string
 		return err
 	}
 	state.BaseURL = resolved.BaseURL
-	state.Region = resolved.Region
 
 	client := NewAPIClient(resolved.BaseURL)
 	if !opts.Offline {
@@ -304,7 +299,6 @@ func (a *app) runRefresh(ctx context.Context, global globalOptions, args []strin
 		return err
 	}
 	state.BaseURL = resolved.BaseURL
-	state.Region = resolved.Region
 
 	client := NewAPIClient(resolved.BaseURL)
 	state, err = a.refreshState(ctx, client, state)
@@ -346,7 +340,6 @@ func (a *app) runLogout(ctx context.Context, global globalOptions, args []string
 		return err
 	}
 	state.BaseURL = resolved.BaseURL
-	state.Region = resolved.Region
 
 	client := NewAPIClient(resolved.BaseURL)
 	if err := a.revokeTokens(ctx, client, state); err != nil {
@@ -454,7 +447,7 @@ func (a *app) login(ctx context.Context, client *APIClient, resolved resolvedOpt
 		return nil, errors.New("exchange CLI auth token returned no token")
 	}
 
-	state := newAuthState(resolved.BaseURL, resolved.Region, exchangeResp.GetUser(), exchangeResp.GetToken())
+	state := newAuthState(resolved.BaseURL, exchangeResp.GetUser(), exchangeResp.GetToken())
 	if state.User.ID == "" {
 		user, err := client.GetMe(waitCtx, state.Token.AccessToken)
 		if err != nil {
@@ -537,9 +530,6 @@ func (a *app) revokeTokens(ctx context.Context, client *APIClient, state *authSt
 func (a *app) printStatus(state *authState, offline bool) {
 	fmt.Fprintln(a.streams.Stdout, "Status: logged in")
 	fmt.Fprintf(a.streams.Stdout, "Base URL: %s\n", state.BaseURL)
-	if state.Region != "" {
-		fmt.Fprintf(a.streams.Stdout, "Region: %s\n", state.Region)
-	}
 	if state.User.ID != "" {
 		fmt.Fprintf(a.streams.Stdout, "User ID: %s\n", state.User.ID)
 	}
@@ -568,47 +558,17 @@ func (a *app) printStatus(state *authState, offline bool) {
 }
 
 func resolveOptions(global globalOptions, state *authState) (resolvedOptions, error) {
-	region := strings.TrimSpace(global.Region)
-	if region == "" && state != nil {
-		region = state.Region
-	}
-	if region == "" {
-		region = "cn"
-	}
-
 	baseURL := strings.TrimSpace(global.BaseURL)
 	if baseURL == "" && state != nil {
 		baseURL = strings.TrimSpace(state.BaseURL)
 	}
 	if baseURL == "" {
-		baseURL = defaultBaseURLForRegion(region)
-	}
-	if baseURL == "" {
-		return resolvedOptions{}, &ExitError{
-			Code:    2,
-			Message: fmt.Sprintf("unsupported region %q; pass --base-url or choose one of cn, us, test, dev", region),
-		}
+		baseURL = defaultConsoleBaseURL
 	}
 
 	return resolvedOptions{
 		BaseURL: strings.TrimRight(baseURL, "/"),
-		Region:  region,
 	}, nil
-}
-
-func defaultBaseURLForRegion(region string) string {
-	switch strings.ToLower(strings.TrimSpace(region)) {
-	case "cn":
-		return "https://console.spatialwalk.top"
-	case "us":
-		return "https://api.openplatform.spatialwalk.cloud"
-	case "test":
-		return "https://console-test.spatialwalk.top"
-	case "dev":
-		return "http://localhost:8083"
-	default:
-		return ""
-	}
 }
 
 func newPKCEVerifier() (string, string, error) {

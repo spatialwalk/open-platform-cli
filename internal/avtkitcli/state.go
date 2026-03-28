@@ -25,7 +25,6 @@ type authStore struct {
 type authState struct {
 	Version int        `json:"version"`
 	BaseURL string     `json:"base_url"`
-	Region  string     `json:"region"`
 	User    userState  `json:"user"`
 	Token   tokenState `json:"token"`
 	SavedAt time.Time  `json:"saved_at"`
@@ -146,11 +145,10 @@ func defaultConfigPaths(userConfigDir string) (string, string) {
 	return configDir, legacyPath
 }
 
-func newAuthState(baseURL, region string, user *consolev1.ConsoleUser, token *consolev1.CLIAuthToken) *authState {
+func newAuthState(baseURL string, user *consolev1.ConsoleUser, token *consolev1.CLIAuthToken) *authState {
 	return &authState{
 		Version: authStateVersion,
 		BaseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"),
-		Region:  strings.TrimSpace(region),
 		User:    userStateFromProto(user),
 		Token:   tokenStateFromProto(token),
 		SavedAt: time.Now().UTC(),

@@ -55,7 +55,6 @@ func TestAuthStoreRoundTrip(t *testing.T) {
 
 	state := &authState{
 		BaseURL: "https://console.spatialwalk.top",
-		Region:  "cn",
 		User: userState{
 			ID:    "user-1",
 			Email: "user@example.com",
@@ -172,7 +171,7 @@ func TestRunUsageShowsAvtkitNames(t *testing.T) {
 	if !strings.Contains(stderr.String(), "AVTKIT_CONSOLE_BASE_URL") {
 		t.Fatalf("expected AVTKIT env usage, got %q", stderr.String())
 	}
-	if strings.Contains(stderr.String(), "OP_CONSOLE_BASE_URL") || strings.Contains(stderr.String(), "OP_REGION") || strings.Contains(stderr.String(), "OP_CONFIG_DIR") {
+	if strings.Contains(stderr.String(), "OP_CONSOLE_BASE_URL") || strings.Contains(stderr.String(), "OP_CONFIG_DIR") || strings.Contains(stderr.String(), "AVTKIT_REGION") {
 		t.Fatalf("expected no OP_* env usage, got %q", stderr.String())
 	}
 	if !strings.Contains(stderr.String(), "auth status") {
@@ -183,6 +182,26 @@ func TestRunUsageShowsAvtkitNames(t *testing.T) {
 	}
 	if !errors.As(err, &exitErr) || exitErr.Code != 2 {
 		t.Fatalf("expected exit code 2, got %#v", err)
+	}
+}
+
+func TestResolveOptionsUsesSingleDefaultBaseURL(t *testing.T) {
+	resolved, err := resolveOptions(globalOptions{}, nil)
+	if err != nil {
+		t.Fatalf("resolveOptions: %v", err)
+	}
+	if resolved.BaseURL != defaultConsoleBaseURL {
+		t.Fatalf("expected default base URL %q, got %q", defaultConsoleBaseURL, resolved.BaseURL)
+	}
+}
+
+func TestResolveOptionsPrefersExplicitBaseURL(t *testing.T) {
+	resolved, err := resolveOptions(globalOptions{BaseURL: "https://console-test.spatialwalk.top/"}, nil)
+	if err != nil {
+		t.Fatalf("resolveOptions: %v", err)
+	}
+	if resolved.BaseURL != "https://console-test.spatialwalk.top" {
+		t.Fatalf("expected explicit base URL to be trimmed, got %q", resolved.BaseURL)
 	}
 }
 
