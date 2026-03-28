@@ -1,0 +1,11 @@
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/spatialwalk/open-platform-cli/api/generated
+plugins:
+  - remote: buf.build/protocolbuffers/go:v1.36.10
+    out: api/generated
+    include_imports: true
+    opt: paths=source_relative

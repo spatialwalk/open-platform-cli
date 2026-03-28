@@ -1,0 +1,77 @@
+name: Protobuf Code Generation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  protobuf-gen-go:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout open-platform-cli repository
+        uses: actions/checkout@v5
+        with:
+          path: clones/spatialwalk/open-platform-cli
+
+      - name: Checkout shared-proto repository
+        uses: actions/checkout@v5
+        with:
+          token: ${{ secrets.CODEGEN_TOKEN }}
+          repository: spatialwalk/shared-proto
+          path: clones/spatialwalk/shared-proto
+          ref: ${{ github.ref_name }}
+
+      - name: Get current shared-proto HEAD SHA
+        id: details
+        run: |
+          cd clones/spatialwalk/shared-proto
+          echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: clones/spatialwalk/open-platform-cli/go.mod
+          cache: true
+          cache-dependency-path: clones/spatialwalk/open-platform-cli/go.mod
+
+      - name: Set up Buf
+        uses: bufbuild/buf-setup-action@v1
+
+      - name: Copy protobuf
+        run: |
+          cd clones/spatialwalk
+          rm -rf open-platform-cli/proto/{common,console,jsonapi}
+          mkdir -p open-platform-cli/proto
+          cp -R shared-proto/{common,console,jsonapi} open-platform-cli/proto
+          ls -la open-platform-cli/proto
+
+      - name: Update Buf lockfile
+        run: |
+          cd clones/spatialwalk/open-platform-cli
+          buf dep update
+
+      - name: Run code generation
+        run: |
+          cd clones/spatialwalk/open-platform-cli
+          buf generate
+
+      - name: Tidy module and test
+        continue-on-error: true
+        run: |
+          cd clones/spatialwalk/open-platform-cli
+          go mod tidy
+          go test ./...
+
+      - name: Commit and push changes
+        run: |
+          cd clones/spatialwalk/open-platform-cli
+          if [ $(git status --porcelain | wc -l) -eq 0 ]; then
+            echo "No changes to commit, skipping..."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add .
+            git commit -m "chore(generated): sync protobuf code from shared-proto@${{ github.ref_name }} (${{ steps.details.outputs.sha }})"
+            git push
+          fi
