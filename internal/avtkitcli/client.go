@@ -192,11 +192,7 @@ func (c *APIClient) doWithHeaders(ctx context.Context, method, path string, quer
 		httpReq.Header.Set("Authorization", "Bearer "+token)
 	}
 	for key, values := range headers {
-		canonicalKey := textproto.CanonicalMIMEHeaderKey(key)
-		httpReq.Header.Del(canonicalKey)
-		for _, value := range values {
-			httpReq.Header.Add(canonicalKey, value)
-		}
+		httpReq.Header[textproto.CanonicalMIMEHeaderKey(key)] = values
 	}
 
 	httpResp, err := c.httpClient.Do(httpReq)
