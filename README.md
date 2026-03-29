@@ -20,7 +20,7 @@ go run ./cmd/avtkit token create app_xxx
 
 `avtkit app create` now creates the app and an initial API key in one step, then prints the app name, `app_id`, and `api_key`.
 
-`avtkit avatar list` lists public avatars from the console API using the current login session. By default it truncates long cover URLs to keep table output readable; add `--show-cover-urls` to print full URLs.
+`avtkit avatar list` lists public avatars from the console API using the current login session. By default it omits the `COVER URL` column; add `--show-cover-urls` to include full cover URLs in the table output.
 
 Resource list commands also support `ls` aliases: `avtkit app ls`, `avtkit api-key ls`, and `avtkit avatar ls`.
 

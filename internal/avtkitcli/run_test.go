@@ -406,7 +406,7 @@ func TestRunAppListRefreshesExpiredToken(t *testing.T) {
 	}
 }
 
-func TestRunPublicAvatarListTruncatesCoverURLsByDefault(t *testing.T) {
+func TestRunPublicAvatarListHidesCoverURLsByDefault(t *testing.T) {
 	dir := t.TempDir()
 	store, err := newAuthStore(dir)
 	if err != nil {
@@ -465,17 +465,15 @@ func TestRunPublicAvatarListTruncatesCoverURLsByDefault(t *testing.T) {
 	}
 
 	output := stdout.String()
-	truncatedCoverURL, truncated := formatCoverURL(longCoverURL, false)
-	if !truncated {
-		t.Fatalf("expected test URL to be truncated")
-	}
-	for _, want := range []string{"AVATAR ID", "avatar_123", "Demo Avatar", truncatedCoverURL, "Use --show-cover-urls to show full cover URLs.", "Next page token: 2", "Total count: 3"} {
+	for _, want := range []string{"AVATAR ID", "avatar_123", "Demo Avatar", "Next page token: 2", "Total count: 3"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("expected output to contain %q, got %q", want, output)
 		}
 	}
-	if strings.Contains(output, longCoverURL) {
-		t.Fatalf("expected output to omit full cover URL by default, got %q", output)
+	for _, unwanted := range []string{"COVER URL", longCoverURL, "Use --show-cover-urls to show full cover URLs."} {
+		if strings.Contains(output, unwanted) {
+			t.Fatalf("expected output to omit %q by default, got %q", unwanted, output)
+		}
 	}
 	if strings.Contains(output, "UPDATED AT") {
 		t.Fatalf("expected output to omit UPDATED AT column, got %q", output)
@@ -530,11 +528,11 @@ func TestRunPublicAvatarListShowCoverURLs(t *testing.T) {
 	}
 
 	output := stdout.String()
+	if !strings.Contains(output, "COVER URL") {
+		t.Fatalf("expected output to contain COVER URL header, got %q", output)
+	}
 	if !strings.Contains(output, longCoverURL) {
 		t.Fatalf("expected output to contain full cover URL, got %q", output)
-	}
-	if strings.Contains(output, "Use --show-cover-urls to show full cover URLs.") {
-		t.Fatalf("expected output to omit truncation hint when full URLs are shown, got %q", output)
 	}
 }
 

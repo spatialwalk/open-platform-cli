@@ -42,7 +42,7 @@ func (a *app) runPublicAvatarList(ctx context.Context, global globalOptions, arg
 	fs.SetOutput(a.streams.Stderr)
 	fs.IntVar(&opts.PageSize, "page-size", opts.PageSize, "Number of public avatars to fetch")
 	fs.StringVar(&opts.PageToken, "page-token", "", "Pagination token returned by a previous list command")
-	fs.BoolVar(&opts.ShowCoverURLs, "show-cover-urls", false, "Show full cover URLs instead of truncated values")
+	fs.BoolVar(&opts.ShowCoverURLs, "show-cover-urls", false, "Include cover URLs in table output")
 	fs.Usage = func() {
 		fmt.Fprintf(a.streams.Stderr, "Usage: %s avatar <list|ls> [--page-size N] [--page-token TOKEN] [--show-cover-urls]\n", cliName)
 	}
@@ -77,21 +77,25 @@ func (a *app) runPublicAvatarList(ctx context.Context, global globalOptions, arg
 	}
 
 	tw := tabwriter.NewWriter(a.streams.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "AVATAR ID\tNAME\tCOVER URL")
-	truncatedCoverURLs := false
-	for _, item := range publicAvatars {
-		coverURL, truncated := formatCoverURL(item.GetCoverUrl(), opts.ShowCoverURLs)
-		truncatedCoverURLs = truncatedCoverURLs || truncated
-		fmt.Fprintf(tw, "%s\t%s\t%s\n",
-			defaultIfEmpty(item.GetId(), "-"),
-			defaultIfEmpty(item.GetName(), "-"),
-			coverURL,
-		)
+	if opts.ShowCoverURLs {
+		fmt.Fprintln(tw, "AVATAR ID\tNAME\tCOVER URL")
+		for _, item := range publicAvatars {
+			fmt.Fprintf(tw, "%s\t%s\t%s\n",
+				defaultIfEmpty(item.GetId(), "-"),
+				defaultIfEmpty(item.GetName(), "-"),
+				defaultIfEmpty(item.GetCoverUrl(), "-"),
+			)
+		}
+	} else {
+		fmt.Fprintln(tw, "AVATAR ID\tNAME")
+		for _, item := range publicAvatars {
+			fmt.Fprintf(tw, "%s\t%s\n",
+				defaultIfEmpty(item.GetId(), "-"),
+				defaultIfEmpty(item.GetName(), "-"),
+			)
+		}
 	}
 	_ = tw.Flush()
-	if truncatedCoverURLs && !opts.ShowCoverURLs {
-		fmt.Fprintln(a.streams.Stdout, "Use --show-cover-urls to show full cover URLs.")
-	}
 
 	printPagination(a.streams.Stdout, resp.GetPagination())
 	return nil
