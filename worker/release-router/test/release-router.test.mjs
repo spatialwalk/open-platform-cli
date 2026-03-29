@@ -8,6 +8,7 @@ import {
 } from "../src/release-router.mjs";
 
 const originalFetch = globalThis.fetch;
+const originalCaches = globalThis.caches;
 
 const sampleRelease = {
   tag_name: "v1.4.0",
@@ -110,6 +111,35 @@ test("worker returns 404 when the platform does not exist in the latest release"
   assert.equal(payload.error, "asset_not_found");
 });
 
+test("worker caches the latest release lookup for 10 minutes", async (t) => {
+  let fetchCalls = 0;
+
+  stubCloudflareCache(t);
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async () => {
+    fetchCalls += 1;
+    return new Response(JSON.stringify(sampleRelease), {
+      status: 200,
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+      },
+    });
+  };
+
+  const worker = createReleaseRouter();
+  const latestResponse = await worker.fetch(new Request("https://downloads.example.com/latest"));
+  assert.equal(latestResponse.status, 200);
+
+  const downloadResponse = await worker.fetch(
+    new Request("https://downloads.example.com/releases/latest/download/linux/amd64"),
+  );
+  assert.equal(downloadResponse.status, 302);
+  assert.equal(fetchCalls, 1);
+});
+
 test("worker rejects unsupported methods", async () => {
   const worker = createReleaseRouter();
   const response = await worker.fetch(
@@ -132,5 +162,24 @@ function stubGitHubReleaseLookup(t, release) {
         "content-type": "application/json; charset=utf-8",
       },
     });
+  };
+}
+
+function stubCloudflareCache(t) {
+  const cacheStore = new Map();
+  t.after(() => {
+    globalThis.caches = originalCaches;
+  });
+
+  globalThis.caches = {
+    default: {
+      async match(request) {
+        const key = request.url;
+        return cacheStore.get(key)?.clone() ?? null;
+      },
+      async put(request, response) {
+        cacheStore.set(request.url, response.clone());
+      },
+    },
   };
 }
