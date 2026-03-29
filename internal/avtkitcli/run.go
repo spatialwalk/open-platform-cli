@@ -136,6 +136,8 @@ func (a *app) run(ctx context.Context, args []string) error {
 		fmt.Fprintln(a.streams.Stderr, "  api-key list     List API keys for an app")
 		fmt.Fprintln(a.streams.Stderr, "  api-key create   Create an API key for an app")
 		fmt.Fprintln(a.streams.Stderr, "  api-key delete   Delete an API key from an app")
+		fmt.Fprintln(a.streams.Stderr, "  public-avatar list   List public avatars")
+		fmt.Fprintln(a.streams.Stderr, "  session-token create Create a temporary session token for an app")
 		fmt.Fprintln(a.streams.Stderr)
 		fmt.Fprintln(a.streams.Stderr, "Environment:")
 		fmt.Fprintln(a.streams.Stderr, "  AVTKIT_CONSOLE_BASE_URL overrides the API base URL")
@@ -171,6 +173,10 @@ func (a *app) run(ctx context.Context, args []string) error {
 		return a.runApp(ctx, global, rest[1:])
 	case "api-key":
 		return a.runAPIKey(ctx, global, rest[1:])
+	case "public-avatar":
+		return a.runPublicAvatar(ctx, global, rest[1:])
+	case "session-token":
+		return a.runSessionToken(ctx, global, rest[1:])
 	case "help", "-h", "--help":
 		fs.Usage()
 		return nil

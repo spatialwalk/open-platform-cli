@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	consolev1 "github.com/spatialwalk/open-platform-cli/api/generated/console/v1"
+	consolev2 "github.com/spatialwalk/open-platform-cli/api/generated/console/v2"
 	jsonapiv1 "github.com/spatialwalk/open-platform-cli/api/generated/jsonapi/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -181,7 +183,7 @@ func TestRunUsageShowsAvtkitNames(t *testing.T) {
 	if !strings.Contains(stderr.String(), "auth status") {
 		t.Fatalf("expected auth commands in usage, got %q", stderr.String())
 	}
-	for _, want := range []string{"app list", "app create", "api-key list", "api-key create"} {
+	for _, want := range []string{"app list", "app create", "api-key list", "api-key create", "public-avatar list", "session-token create"} {
 		if !strings.Contains(stderr.String(), want) {
 			t.Fatalf("expected usage to contain %q, got %q", want, stderr.String())
 		}
@@ -401,6 +403,70 @@ func TestRunAppListRefreshesExpiredToken(t *testing.T) {
 	}
 }
 
+func TestRunPublicAvatarListUsesStoredAuthAndPrintsPagination(t *testing.T) {
+	dir := t.TempDir()
+	store, err := newAuthStore(dir)
+	if err != nil {
+		t.Fatalf("newAuthStore: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/console/public-avatars" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer stored-access" {
+			t.Fatalf("expected stored access token, got %q", got)
+		}
+		if got := r.URL.Query().Get("pagination.pageSize"); got != "2" {
+			t.Fatalf("expected page size query of 2, got %q", got)
+		}
+
+		writeProtoJSON(t, w, &consolev2.ListPublicAvatarsResponse{
+			PublicAvatars: []*consolev2.PublicAvatar{
+				{
+					Id:        "avatar_123",
+					Name:      "Demo Avatar",
+					CoverUrl:  "https://cdn.example.com/avatar.png",
+					UpdatedAt: timestamppb.New(time.Date(2026, 3, 29, 14, 0, 0, 0, time.UTC)),
+				},
+			},
+			Pagination: &jsonapiv1.PaginationResponse{
+				NextPageToken: "2",
+				TotalCount:    3,
+			},
+		})
+	}))
+	defer server.Close()
+
+	if err := store.Save(&authState{
+		BaseURL: server.URL,
+		Token: tokenState{
+			AccessToken:  "stored-access",
+			RefreshToken: "stored-refresh",
+			ExpiresAt:    time.Now().Add(time.Hour).UTC(),
+		},
+	}); err != nil {
+		t.Fatalf("save auth state: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err = Run(context.Background(), []string{"--config-dir", dir, "public-avatar", "list", "--page-size", "2"}, Streams{
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v (stderr=%q)", err, stderr.String())
+	}
+
+	output := stdout.String()
+	for _, want := range []string{"AVATAR ID", "avatar_123", "Demo Avatar", "https://cdn.example.com/avatar.png", "Next page token: 2", "Total count: 3"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected output to contain %q, got %q", want, output)
+		}
+	}
+}
+
 func TestRunAPIKeyListMasksValuesByDefault(t *testing.T) {
 	dir := t.TempDir()
 	store, err := newAuthStore(dir)
@@ -449,6 +515,101 @@ func TestRunAPIKeyListMasksValuesByDefault(t *testing.T) {
 	}
 	if !strings.Contains(output, "secretva******456789") {
 		t.Fatalf("expected masked API key output, got %q", output)
+	}
+}
+
+func TestRunSessionTokenCreateUsesAppAPIKey(t *testing.T) {
+	dir := t.TempDir()
+	store, err := newAuthStore(dir)
+	if err != nil {
+		t.Fatalf("newAuthStore: %v", err)
+	}
+
+	var requestBody consolev1.CreateSessionTokenRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/apps/app_123":
+			if got := r.Header.Get("Authorization"); got != "Bearer stored-access" {
+				t.Fatalf("expected stored access token, got %q", got)
+			}
+			writeProtoJSON(t, w, &consolev1.AppServiceGetAppResponse{
+				App: &consolev1.App{
+					AppId: "app_123",
+					ApiKeys: []*consolev1.APIKey{
+						{ApiKey: "sk_live_1234567890"},
+						{ApiKey: "sk_live_other_1234567890"},
+					},
+				},
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/console/session-tokens":
+			if got := r.Header.Get("Authorization"); got != "" {
+				t.Fatalf("expected no Authorization header, got %q", got)
+			}
+			if got := r.Header.Get("X-Api-Key"); got != "sk_live_1234567890" {
+				t.Fatalf("expected selected API key, got %q", got)
+			}
+
+			payload, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Fatalf("read request body: %v", err)
+			}
+			if err := protojson.Unmarshal(payload, &requestBody); err != nil {
+				t.Fatalf("unmarshal request body: %v", err)
+			}
+
+			writeProtoJSON(t, w, &consolev1.CreateSessionTokenResponse{
+				SessionToken: "session-token-123",
+			})
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	if err := store.Save(&authState{
+		BaseURL: server.URL,
+		Token: tokenState{
+			AccessToken:  "stored-access",
+			RefreshToken: "stored-refresh",
+			ExpiresAt:    time.Now().Add(time.Hour).UTC(),
+		},
+	}); err != nil {
+		t.Fatalf("save auth state: %v", err)
+	}
+
+	start := time.Now().UTC()
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err = Run(context.Background(), []string{"--config-dir", dir, "session-token", "create", "--expire-in", "90m", "--model-version", "model-v1", "app_123"}, Streams{
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v (stderr=%q)", err, stderr.String())
+	}
+
+	if requestBody.GetModelVersion() != "model-v1" {
+		t.Fatalf("expected model version model-v1, got %q", requestBody.GetModelVersion())
+	}
+	expiresAt := time.Unix(requestBody.GetExpireAt(), 0).UTC()
+	if expiresAt.Before(start.Add(89*time.Minute)) || expiresAt.After(start.Add(91*time.Minute)) {
+		t.Fatalf("expected expireAt near 90m from now, got %s", expiresAt.Format(time.RFC3339))
+	}
+
+	output := stdout.String()
+	for _, want := range []string{
+		"Session token created.",
+		"App ID: app_123",
+		"API key: " + formatAPIKeyValue("sk_live_1234567890", false),
+		"Model version: model-v1",
+		"Session token: session-token-123",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected output to contain %q, got %q", want, output)
+		}
+	}
+	if !strings.Contains(stderr.String(), "multiple API keys found; using the first available key") {
+		t.Fatalf("expected multiple API keys warning, got %q", stderr.String())
 	}
 }
 
@@ -595,6 +756,22 @@ func TestRunAppDeleteRequiresYes(t *testing.T) {
 	}
 	if !strings.Contains(exitErr.Error(), "--yes") {
 		t.Fatalf("expected --yes guidance, got %q", exitErr.Error())
+	}
+}
+
+func TestSelectAppAPIKeyPrefersRequestedKey(t *testing.T) {
+	selected, notice, err := selectAppAPIKey("app_123", []*consolev1.APIKey{
+		{ApiKey: "sk_live_first_123456"},
+		{ApiKey: "sk_live_second_123456"},
+	}, "sk_live_second_123456")
+	if err != nil {
+		t.Fatalf("selectAppAPIKey: %v", err)
+	}
+	if selected != "sk_live_second_123456" {
+		t.Fatalf("expected requested API key, got %q", selected)
+	}
+	if notice != "" {
+		t.Fatalf("expected empty notice when API key is explicitly selected, got %q", notice)
 	}
 }
 
