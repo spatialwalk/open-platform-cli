@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
 	consolev1 "github.com/spatialwalk/open-platform-cli/api/generated/console/v1"
+	consolev2 "github.com/spatialwalk/open-platform-cli/api/generated/console/v2"
 	jsonapiv1 "github.com/spatialwalk/open-platform-cli/api/generated/jsonapi/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -141,7 +143,29 @@ func (c *APIClient) DeleteAPIKey(ctx context.Context, accessToken, appID, apiKey
 	return c.do(ctx, http.MethodDelete, path, nil, nil, accessToken, &consolev1.AppServiceDeleteAPIKeyResponse{})
 }
 
+func (c *APIClient) CreateSessionToken(ctx context.Context, apiKey string, req *consolev1.CreateSessionTokenRequest) (*consolev1.CreateSessionTokenResponse, error) {
+	resp := &consolev1.CreateSessionTokenResponse{}
+	headers := http.Header{}
+	headers.Set("X-API-KEY", strings.TrimSpace(apiKey))
+	if err := c.doWithHeaders(ctx, http.MethodPost, "/v1/console/session-tokens", nil, req, "", headers, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (c *APIClient) ListPublicAvatars(ctx context.Context, accessToken string, req *consolev2.ListPublicAvatarsRequest) (*consolev2.ListPublicAvatarsResponse, error) {
+	resp := &consolev2.ListPublicAvatarsResponse{}
+	if err := c.do(ctx, http.MethodGet, "/v2/console/public-avatars", paginationQuery(req.GetPagination()), nil, accessToken, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
 func (c *APIClient) do(ctx context.Context, method, path string, query url.Values, request proto.Message, accessToken string, response proto.Message) error {
+	return c.doWithHeaders(ctx, method, path, query, request, accessToken, nil, response)
+}
+
+func (c *APIClient) doWithHeaders(ctx context.Context, method, path string, query url.Values, request proto.Message, accessToken string, headers http.Header, response proto.Message) error {
 	fullURL := c.baseURL + path
 	if len(query) > 0 {
 		fullURL += "?" + query.Encode()
@@ -166,6 +190,9 @@ func (c *APIClient) do(ctx context.Context, method, path string, query url.Value
 	}
 	if token := strings.TrimSpace(accessToken); token != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+token)
+	}
+	for key, values := range headers {
+		httpReq.Header[textproto.CanonicalMIMEHeaderKey(key)] = values
 	}
 
 	httpResp, err := c.httpClient.Do(httpReq)
