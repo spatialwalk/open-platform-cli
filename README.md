@@ -46,3 +46,9 @@ To refresh generated code locally, check out `shared-proto` next to this repo an
 ```bash
 ./scripts/protobuf-codegen.sh ../shared-proto
 ```
+
+## Release router worker
+
+A minimal Cloudflare Worker for stable install and upgrade entrypoints lives under `worker/release-router`.
+
+See `worker/release-router/README.md` for deployment, routes, and the expected GitHub Release asset naming contract.

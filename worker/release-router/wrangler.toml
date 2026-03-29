@@ -1,0 +1,14 @@
+"$schema" = "./node_modules/wrangler/config-schema.json"
+name = "open-platform-cli-release-router"
+main = "src/index.mjs"
+compatibility_date = "2026-03-29"
+
+[observability.logs]
+enabled = true
+invocation_logs = true
+
+[vars]
+GITHUB_OWNER = "spatialwalk"
+GITHUB_REPO = "open-platform-cli"
+CLI_NAME = "avtkit"
+DEFAULT_INSTALL_DIR = "/usr/local/bin"
