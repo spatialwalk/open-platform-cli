@@ -171,7 +171,7 @@ func TestRunUsageShowsAvtkitNames(t *testing.T) {
 	})
 
 	var exitErr *ExitError
-	if err == nil || !strings.Contains(stderr.String(), "avtkit [--base-url URL]") {
+	if err == nil || !strings.Contains(stderr.String(), "avtkit [--version] [--base-url URL]") {
 		t.Fatalf("expected avtkit usage in stderr, got err=%v stderr=%q", err, stderr.String())
 	}
 	if !strings.Contains(stderr.String(), "AVTKIT_CONSOLE_BASE_URL") {
@@ -183,7 +183,7 @@ func TestRunUsageShowsAvtkitNames(t *testing.T) {
 	if !strings.Contains(stderr.String(), "auth status") {
 		t.Fatalf("expected auth commands in usage, got %q", stderr.String())
 	}
-	for _, want := range []string{"app list|ls", "app create", "api-key list|ls", "api-key create", "avatar list|ls", "token create"} {
+	for _, want := range []string{"--version", "app list|ls", "app create", "api-key list|ls", "api-key create", "avatar list|ls", "token create", "version"} {
 		if !strings.Contains(stderr.String(), want) {
 			t.Fatalf("expected usage to contain %q, got %q", want, stderr.String())
 		}

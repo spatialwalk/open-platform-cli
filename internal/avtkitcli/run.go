@@ -115,14 +115,21 @@ func (a *app) run(ctx context.Context, args []string) error {
 		BaseURL:   strings.TrimSpace(os.Getenv("AVTKIT_CONSOLE_BASE_URL")),
 		ConfigDir: strings.TrimSpace(os.Getenv("AVTKIT_CONFIG_DIR")),
 	}
+	var showVersion bool
 
 	fs := flag.NewFlagSet(cliName, flag.ContinueOnError)
 	fs.SetOutput(a.streams.Stderr)
+	fs.BoolVar(&showVersion, "version", false, "Print version information and exit")
 	fs.StringVar(&global.BaseURL, "base-url", global.BaseURL, "Console API base URL")
 	fs.StringVar(&global.ConfigDir, "config-dir", global.ConfigDir, "Override CLI config directory")
 	fs.Usage = func() {
 		fmt.Fprintln(a.streams.Stderr, "Usage:")
-		fmt.Fprintf(a.streams.Stderr, "  %s [--base-url URL] [--config-dir DIR] <command>\n", cliName)
+		fmt.Fprintf(a.streams.Stderr, "  %s [--version] [--base-url URL] [--config-dir DIR] <command>\n", cliName)
+		fmt.Fprintln(a.streams.Stderr)
+		fmt.Fprintln(a.streams.Stderr, "Global Flags:")
+		fmt.Fprintln(a.streams.Stderr, "  --version        Print version information and exit")
+		fmt.Fprintln(a.streams.Stderr, "  --base-url URL   Console API base URL")
+		fmt.Fprintln(a.streams.Stderr, "  --config-dir DIR Override CLI config directory")
 		fmt.Fprintln(a.streams.Stderr)
 		fmt.Fprintln(a.streams.Stderr, "Commands:")
 		fmt.Fprintln(a.streams.Stderr, "  login            Sign in with the browser-based CLI auth flow")
@@ -138,6 +145,7 @@ func (a *app) run(ctx context.Context, args []string) error {
 		fmt.Fprintln(a.streams.Stderr, "  api-key delete   Delete an API key from an app")
 		fmt.Fprintln(a.streams.Stderr, "  avatar list|ls   List public avatars")
 		fmt.Fprintln(a.streams.Stderr, "  token create     Create a temporary session token for an app")
+		fmt.Fprintln(a.streams.Stderr, "  version          Print CLI version information")
 		fmt.Fprintln(a.streams.Stderr)
 		fmt.Fprintln(a.streams.Stderr, "Environment:")
 		fmt.Fprintln(a.streams.Stderr, "  AVTKIT_CONSOLE_BASE_URL overrides the API base URL")
@@ -146,6 +154,11 @@ func (a *app) run(ctx context.Context, args []string) error {
 
 	if err := fs.Parse(args); err != nil {
 		return &ExitError{Code: 2, Message: err.Error()}
+	}
+
+	if showVersion {
+		printVersion(a.streams.Stdout)
+		return nil
 	}
 
 	if global.ConfigDir != "" {
@@ -177,6 +190,8 @@ func (a *app) run(ctx context.Context, args []string) error {
 		return a.runPublicAvatar(ctx, global, rest[1:])
 	case "token":
 		return a.runSessionToken(ctx, global, rest[1:])
+	case "version":
+		return a.runVersion(rest[1:])
 	case "help", "-h", "--help":
 		fs.Usage()
 		return nil
@@ -184,6 +199,26 @@ func (a *app) run(ctx context.Context, args []string) error {
 		fs.Usage()
 		return &ExitError{Code: 2, Message: fmt.Sprintf("unknown command %q", rest[0])}
 	}
+}
+
+func (a *app) runVersion(args []string) error {
+	fs := flag.NewFlagSet("version", flag.ContinueOnError)
+	fs.SetOutput(a.streams.Stderr)
+	fs.Usage = func() {
+		fmt.Fprintf(a.streams.Stderr, "Usage: %s version\n", cliName)
+	}
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return &ExitError{Code: 2, Message: err.Error()}
+	}
+	if fs.NArg() != 0 {
+		return &ExitError{Code: 2, Message: "version does not accept positional arguments"}
+	}
+
+	printVersion(a.streams.Stdout)
+	return nil
 }
 
 func (a *app) runAuth(ctx context.Context, global globalOptions, args []string) error {
