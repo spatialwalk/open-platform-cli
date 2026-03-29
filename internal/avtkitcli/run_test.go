@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
@@ -214,5 +215,54 @@ func TestFirstQueryValue(t *testing.T) {
 	value := firstQueryValue(values, "missing", "empty", "code")
 	if value != "abc" {
 		t.Fatalf("expected abc, got %q", value)
+	}
+}
+
+func TestWriteCallbackPageRendersStyledSuccessMarkup(t *testing.T) {
+	recorder := httptest.NewRecorder()
+
+	writeCallbackPage(recorder, http.StatusOK, callbackSuccessTitle, "You can return to the terminal.")
+
+	body := recorder.Body.String()
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
+	}
+	if got := recorder.Header().Get("Content-Type"); got != "text/html; charset=utf-8" {
+		t.Fatalf("expected HTML content type, got %q", got)
+	}
+	for _, want := range []string{
+		`<meta name="viewport" content="width=device-width, initial-scale=1">`,
+		`class="success"`,
+		`AVTKit CLI`,
+		`status-badge">Success</span>`,
+		callbackSuccessTitle,
+		`You can return to the terminal.`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected body to contain %q, got %q", want, body)
+		}
+	}
+}
+
+func TestWriteCallbackPageEscapesFailureContent(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	title := `Authorization failed <script>alert("x")</script>`
+	message := `callback <b>did not</b> include an authorization code`
+
+	writeCallbackPage(recorder, http.StatusBadRequest, title, message)
+
+	body := recorder.Body.String()
+	for _, want := range []string{
+		`class="failure"`,
+		`status-badge">Failed</span>`,
+		`Authorization failed &lt;script&gt;alert(&#34;x&#34;)&lt;/script&gt;`,
+		`callback &lt;b&gt;did not&lt;/b&gt; include an authorization code`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected body to contain %q, got %q", want, body)
+		}
+	}
+	if strings.Contains(body, `<script>alert("x")</script>`) || strings.Contains(body, `<b>did not</b>`) {
+		t.Fatalf("expected HTML content to be escaped, got %q", body)
 	}
 }
