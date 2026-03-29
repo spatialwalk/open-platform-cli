@@ -88,6 +88,17 @@ copy_binary() {
   sudo chmod 0755 "$dst"
 }
 
+abort_existing_install() {
+  if [ "$MODE" != "install" ] || [ ! -e "$target_path" ]; then
+    return
+  fi
+
+  log "error: found an existing $CLI_NAME binary at $target_path"
+  log "error: install.sh only supports fresh installs and will not overwrite an existing binary"
+  log "error: to replace it, run the upgrade script instead: curl -fsSL $BASE_URL/upgrade.sh | sh"
+  exit 1
+}
+
 need_cmd curl
 need_cmd tar
 need_cmd uname
@@ -110,6 +121,7 @@ binary_path="$workdir/$CLI_NAME"
 target_path="$install_dir/$CLI_NAME"
 
 mkdir -p "$install_dir"
+abort_existing_install
 
 log "$MODE $CLI_NAME for $os/$arch"
 curl -fsSL "$DOWNLOAD_URL/$os/$arch" -o "$archive_path"
