@@ -10,7 +10,7 @@ tag_name="$1"
 output_dir="${2:-dist}"
 cli_name="${CLI_NAME:-avtkit}"
 version="${tag_name#v}"
-build_date="${BUILD_DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+build_date="${BUILD_DATE:-$(date -u '+%Y-%m-%dT%H:%M:%SZ')}"
 commit="${COMMIT:-$(git rev-parse --short=12 HEAD)}"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -22,7 +22,10 @@ fi
 
 mkdir -p "$output_dir"
 
-ldflags="-s -w -X github.com/spatialwalk/open-platform-cli/internal/avtkitcli.version=${version} -X github.com/spatialwalk/open-platform-cli/internal/avtkitcli.commit=${commit} -X github.com/spatialwalk/open-platform-cli/internal/avtkitcli.buildDate=${build_date}"
+ldflags="-s -w"
+ldflags+=" -X github.com/spatialwalk/open-platform-cli/internal/avtkitcli.version=${version}"
+ldflags+=" -X github.com/spatialwalk/open-platform-cli/internal/avtkitcli.commit=${commit}"
+ldflags+=" -X github.com/spatialwalk/open-platform-cli/internal/avtkitcli.buildDate=${build_date}"
 
 targets=(
   "darwin amd64"
