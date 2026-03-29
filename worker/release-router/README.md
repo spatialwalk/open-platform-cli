@@ -46,7 +46,8 @@ Examples that will match:
 
 - `avtkit_v1.4.0_darwin_arm64.tar.gz`
 - `avtkit_v1.4.0_linux_amd64.tar.gz`
-- `avtkit-v1.4.0-windows-amd64.zip`
+- `avtkit_v1.4.0_windows_amd64.zip`
+- `avtkit_v1.4.0_checksums.txt`
 
 For the Unix install script to work, release archives should extract to a file named `avtkit`.
 
@@ -104,4 +105,10 @@ Optional secret:
 
 This PR only adds the Worker MVP. It does not add the GitHub Release build pipeline yet.
 
-When the release workflow lands, it should publish multi-platform archives whose names follow the contract above. Once that exists, the Worker endpoints become production-ready without changing the public curl URLs.
+The release workflow now publishes multi-platform archives whose names follow the contract above, plus `avtkit_<tag>_checksums.txt`. The CLI binary embedded in each archive receives build metadata via the existing Go `-ldflags` variables:
+
+- `version`: release tag with the leading `v` removed
+- `commit`: `git rev-parse --short=12 HEAD`
+- `buildDate`: UTC timestamp in RFC3339 format
+
+With that in place, the Worker endpoints are production-ready without changing the public curl URLs.
