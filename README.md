@@ -52,3 +52,6 @@ To refresh generated code locally, check out `shared-proto` next to this repo an
 A minimal Cloudflare Worker for stable install and upgrade entrypoints lives under `worker/release-router`.
 
 See `worker/release-router/README.md` for deployment, routes, and the expected GitHub Release asset naming contract.
+
+GitHub Release artifact publishing is handled by `.github/workflows/release-artifacts.yml`.
+When a GitHub Release is published, the workflow runs `go test ./...`, builds the supported platform archives, injects version metadata via the existing `-ldflags` variables, generates `avtkit_<tag>_checksums.txt`, and uploads the assets back to that release.

@@ -1,0 +1,58 @@
+name: Release Artifacts
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload:
+    name: Build and Upload Release Assets
+    runs-on: ubuntu-latest
+    env:
+      CLI_NAME: avtkit
+      TAG_NAME: ${{ github.event.release.tag_name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.mod
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Build release archives
+        run: |
+          chmod +x ./scripts/build-release-artifacts.sh
+          ./scripts/build-release-artifacts.sh "$TAG_NAME" dist
+
+      - name: Smoke check linux amd64 binary
+        run: |
+          smoke_dir="$(mktemp -d)"
+          trap 'rm -rf "$smoke_dir"' EXIT
+          tar -xzf "dist/${CLI_NAME}_${TAG_NAME}_linux_amd64.tar.gz" -C "$smoke_dir"
+          version_output="$("$smoke_dir/${CLI_NAME}" --version)"
+          printf '%s\n' "$version_output"
+          grep -F "avtkit ${TAG_NAME#v}" <<<"$version_output"
+          grep -F "Git commit: $(git rev-parse --short=12 HEAD)" <<<"$version_output"
+          grep -F "Build date: " <<<"$version_output"
+
+      - name: Generate checksums
+        run: |
+          (
+            cd dist
+            sha256sum -- * | sort -k 2 > "${CLI_NAME}_${TAG_NAME}_checksums.txt"
+          )
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG_NAME" dist/* --clobber
