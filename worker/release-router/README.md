@@ -10,6 +10,8 @@ This Cloudflare Worker gives `avtkit` installation docs a stable URL while still
 - `GET /releases/latest/download/:os/:arch`: resolves the latest GitHub release, finds the matching asset for the requested platform, and redirects to the GitHub asset download URL.
 - `GET /healthz`: lightweight health check.
 
+Latest release lookups are cached at the Cloudflare Worker edge for 10 minutes to reduce direct GitHub API traffic while keeping release propagation reasonably fresh.
+
 Example stable docs entrypoints:
 
 ```bash

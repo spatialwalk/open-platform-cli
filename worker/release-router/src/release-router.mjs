@@ -10,6 +10,8 @@ const DEFAULT_CONFIG = {
 };
 
 const CACHE_CONTROL = "public, max-age=300";
+const LATEST_RELEASE_CACHE_TTL_SECONDS = 600;
+const LATEST_RELEASE_CACHE_CONTROL = `public, max-age=${LATEST_RELEASE_CACHE_TTL_SECONDS}`;
 const INSTALL_ROUTES = new Set(["/install", "/install.sh"]);
 const UPGRADE_ROUTES = new Set(["/upgrade", "/upgrade.sh"]);
 
@@ -146,6 +148,16 @@ function resolveConfig(env, staticConfig) {
 }
 
 async function fetchLatestRelease(config) {
+  const cache = globalThis.caches?.default;
+  const cacheKey = buildLatestReleaseCacheKey(config);
+
+  if (cache) {
+    const cachedResponse = await cache.match(cacheKey);
+    if (cachedResponse) {
+      return cachedResponse.json();
+    }
+  }
+
   const releaseUrl = `${config.githubApiBaseUrl.replace(/\/+$/, "")}/repos/${config.githubOwner}/${config.githubRepo}/releases/latest`;
   const headers = new Headers({
     accept: "application/vnd.github+json",
@@ -182,7 +194,34 @@ async function fetchLatestRelease(config) {
     );
   }
 
-  return response.json();
+  const release = await response.json();
+
+  if (cache) {
+    await cache.put(
+      cacheKey,
+      new Response(JSON.stringify(release), {
+        headers: {
+          "cache-control": LATEST_RELEASE_CACHE_CONTROL,
+          "content-type": "application/json; charset=utf-8",
+        },
+      }),
+    );
+  }
+
+  return release;
+}
+
+function buildLatestReleaseCacheKey(config) {
+  const cacheUrl = new URL("https://release-router-cache.internal/github/latest");
+  cacheUrl.searchParams.set("api_base", config.githubApiBaseUrl.replace(/\/+$/, ""));
+  cacheUrl.searchParams.set("owner", config.githubOwner);
+  cacheUrl.searchParams.set("repo", config.githubRepo);
+  return new Request(cacheUrl.toString(), {
+    method: "GET",
+    headers: {
+      accept: "application/json",
+    },
+  });
 }
 
 function buildLatestResponse(url, config, release) {
