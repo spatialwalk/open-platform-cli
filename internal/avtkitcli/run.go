@@ -676,10 +676,65 @@ func firstQueryValue(values url.Values, keys ...string) string {
 func writeCallbackPage(w http.ResponseWriter, status int, title, message string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
+
+	pageTone := "success"
+	statusLabel := "Success"
+	statusIcon := "&#10003;"
+	if status >= http.StatusBadRequest {
+		pageTone = "failure"
+		statusLabel = "Failed"
+		statusIcon = "!"
+	}
+
 	_, _ = fmt.Fprintf(
 		w,
-		"<!doctype html><html><head><meta charset=\"utf-8\"><title>%s</title></head><body><h1>%s</h1><p>%s</p></body></html>",
+		`<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>%s</title>
+<style>
+:root{color-scheme:light;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;padding:24px;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at top,rgba(59,130,246,.16),transparent 34%%),linear-gradient(180deg,#f8fafc 0%%,#eef2f7 100%%);color:#0f172a}
+.shell{width:min(100%%,560px)}
+.card{position:relative;overflow:hidden;border:1px solid rgba(15,23,42,.1);border-radius:24px;background:rgba(255,255,255,.94);box-shadow:0 24px 60px rgba(15,23,42,.12);backdrop-filter:blur(12px);padding:28px}
+.card:before{content:"";position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,var(--accent-soft),var(--accent))}
+.badge-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:22px}
+.brand-badge,.status-badge{display:inline-flex;align-items:center;min-height:32px;padding:0 12px;border-radius:999px;border:1px solid rgba(15,23,42,.08);font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.brand-badge{background:#fff;color:#475569}
+.status-badge{background:var(--accent-bg);border-color:var(--accent-border);color:var(--accent)}
+.status-icon{width:60px;height:60px;border-radius:18px;display:flex;align-items:center;justify-content:center;margin-bottom:20px;background:var(--accent-bg);border:1px solid var(--accent-border);color:var(--accent);font-size:30px;font-weight:700;line-height:1}
+h1{margin:0 0 12px;font-size:clamp(1.75rem,4vw,2.25rem);line-height:1.1;letter-spacing:-.03em}
+p{margin:0;font-size:1rem;line-height:1.7;color:#475569}
+.success{--accent:#0f766e;--accent-soft:rgba(45,212,191,.4);--accent-bg:#ecfdf5;--accent-border:rgba(15,118,110,.16)}
+.failure{--accent:#b42318;--accent-soft:rgba(248,113,113,.4);--accent-bg:#fef2f2;--accent-border:rgba(180,35,24,.16)}
+@media (max-width:640px){
+body{padding:16px}
+.card{padding:22px 20px;border-radius:20px}
+.status-icon{width:52px;height:52px;border-radius:16px;font-size:26px}
+}
+</style>
+</head>
+<body class="%s">
+<main class="shell">
+<section class="card" role="status" aria-live="polite">
+<div class="badge-row">
+<span class="brand-badge">AVTKit CLI</span>
+<span class="status-badge">%s</span>
+</div>
+<div class="status-icon" aria-hidden="true">%s</div>
+<h1>%s</h1>
+<p>%s</p>
+</section>
+</main>
+</body>
+</html>`,
 		html.EscapeString(title),
+		pageTone,
+		statusLabel,
+		statusIcon,
 		html.EscapeString(title),
 		html.EscapeString(message),
 	)
