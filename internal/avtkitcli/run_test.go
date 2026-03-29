@@ -406,12 +406,14 @@ func TestRunAppListRefreshesExpiredToken(t *testing.T) {
 	}
 }
 
-func TestRunPublicAvatarListUsesStoredAuthAndPrintsPagination(t *testing.T) {
+func TestRunPublicAvatarListTruncatesCoverURLsByDefault(t *testing.T) {
 	dir := t.TempDir()
 	store, err := newAuthStore(dir)
 	if err != nil {
 		t.Fatalf("newAuthStore: %v", err)
 	}
+
+	longCoverURL := "https://cdn.example.com/public/avatars/demo-avatar/assets/cover-images/final/avatar-cover-image-v20260329.png?signature=abcdefghijklmnopqrstuvwxyz"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v2/console/public-avatars" {
@@ -429,7 +431,7 @@ func TestRunPublicAvatarListUsesStoredAuthAndPrintsPagination(t *testing.T) {
 				{
 					Id:        "avatar_123",
 					Name:      "Demo Avatar",
-					CoverUrl:  "https://cdn.example.com/avatar.png",
+					CoverUrl:  longCoverURL,
 					UpdatedAt: timestamppb.New(time.Date(2026, 3, 29, 14, 0, 0, 0, time.UTC)),
 				},
 			},
@@ -463,13 +465,76 @@ func TestRunPublicAvatarListUsesStoredAuthAndPrintsPagination(t *testing.T) {
 	}
 
 	output := stdout.String()
-	for _, want := range []string{"AVATAR ID", "avatar_123", "Demo Avatar", "https://cdn.example.com/avatar.png", "Next page token: 2", "Total count: 3"} {
+	truncatedCoverURL, truncated := formatCoverURL(longCoverURL, false)
+	if !truncated {
+		t.Fatalf("expected test URL to be truncated")
+	}
+	for _, want := range []string{"AVATAR ID", "avatar_123", "Demo Avatar", truncatedCoverURL, "Use --show-cover-urls to show full cover URLs.", "Next page token: 2", "Total count: 3"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("expected output to contain %q, got %q", want, output)
 		}
 	}
+	if strings.Contains(output, longCoverURL) {
+		t.Fatalf("expected output to omit full cover URL by default, got %q", output)
+	}
 	if strings.Contains(output, "UPDATED AT") {
 		t.Fatalf("expected output to omit UPDATED AT column, got %q", output)
+	}
+}
+
+func TestRunPublicAvatarListShowCoverURLs(t *testing.T) {
+	dir := t.TempDir()
+	store, err := newAuthStore(dir)
+	if err != nil {
+		t.Fatalf("newAuthStore: %v", err)
+	}
+
+	longCoverURL := "https://cdn.example.com/public/avatars/demo-avatar/assets/cover-images/final/avatar-cover-image-v20260329.png?signature=abcdefghijklmnopqrstuvwxyz"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/console/public-avatars" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+
+		writeProtoJSON(t, w, &consolev2.ListPublicAvatarsResponse{
+			PublicAvatars: []*consolev2.PublicAvatar{
+				{
+					Id:       "avatar_123",
+					Name:     "Demo Avatar",
+					CoverUrl: longCoverURL,
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	if err := store.Save(&authState{
+		BaseURL: server.URL,
+		Token: tokenState{
+			AccessToken:  "stored-access",
+			RefreshToken: "stored-refresh",
+			ExpiresAt:    time.Now().Add(time.Hour).UTC(),
+		},
+	}); err != nil {
+		t.Fatalf("save auth state: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err = Run(context.Background(), []string{"--config-dir", dir, "avatar", "ls", "--show-cover-urls"}, Streams{
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v (stderr=%q)", err, stderr.String())
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, longCoverURL) {
+		t.Fatalf("expected output to contain full cover URL, got %q", output)
+	}
+	if strings.Contains(output, "Use --show-cover-urls to show full cover URLs.") {
+		t.Fatalf("expected output to omit truncation hint when full URLs are shown, got %q", output)
 	}
 }
 

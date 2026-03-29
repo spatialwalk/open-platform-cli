@@ -549,6 +549,34 @@ func formatAPIKeyValue(value string, showValues bool) string {
 	return value[:8] + strings.Repeat("*", len(value)-14) + value[len(value)-6:]
 }
 
+const defaultCoverURLWidth = 48
+
+func formatCoverURL(value string, showValues bool) (string, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "-", false
+	}
+	if showValues {
+		return value, false
+	}
+
+	return truncateMiddle(value, defaultCoverURLWidth)
+}
+
+func truncateMiddle(value string, maxWidth int) (string, bool) {
+	if len(value) <= maxWidth {
+		return value, false
+	}
+	if maxWidth <= 3 {
+		return value[:maxWidth], true
+	}
+
+	remaining := maxWidth - 3
+	head := remaining / 2
+	tail := remaining - head
+	return value[:head] + "..." + value[len(value)-tail:], true
+}
+
 func defaultIfEmpty(value, fallback string) string {
 	if strings.TrimSpace(value) == "" {
 		return fallback
