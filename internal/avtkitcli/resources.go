@@ -175,19 +175,43 @@ func (a *app) runAppCreate(ctx context.Context, global globalOptions, args []str
 	}
 
 	var resp *consolev1.AppServiceCreateAppResponse
+	var apiKeyResp *consolev1.AppServiceCreateAPIKeyResponse
 	if err := a.withAuthenticatedSession(ctx, global, func(session *authedSession) error {
 		var err error
 		resp, err = session.client.CreateApp(ctx, session.state.Token.AccessToken, &consolev1.AppServiceCreateAppRequest{
 			Name: name,
 		})
-		return err
+		if err != nil {
+			return err
+		}
+
+		apiKeyResp, err = session.client.CreateAPIKey(ctx, session.state.Token.AccessToken, resp.GetAppId())
+		if err != nil {
+			return err
+		}
+		if apiKeyResp.GetApiKey() == nil {
+			return errors.New("create api key returned no api key")
+		}
+		return nil
 	}); err != nil {
+		if resp != nil && strings.TrimSpace(resp.GetAppId()) != "" {
+			fmt.Fprintln(a.streams.Stdout, "App created.")
+			fmt.Fprintf(a.streams.Stdout, "Name: %s\n", name)
+			fmt.Fprintf(a.streams.Stdout, "App ID: %s\n", resp.GetAppId())
+			fmt.Fprintf(a.streams.Stderr, "Run `%s api-key create %s` to create an API key manually.\n", cliName, resp.GetAppId())
+			return fmt.Errorf("app created with ID %s, but failed to create API key: %w", resp.GetAppId(), err)
+		}
 		return err
 	}
 
-	fmt.Fprintln(a.streams.Stdout, "App created.")
-	fmt.Fprintf(a.streams.Stdout, "App ID: %s\n", resp.GetAppId())
+	fmt.Fprintln(a.streams.Stdout, "App created and API key generated.")
 	fmt.Fprintf(a.streams.Stdout, "Name: %s\n", name)
+	fmt.Fprintf(a.streams.Stdout, "App ID: %s\n", resp.GetAppId())
+	fmt.Fprintf(a.streams.Stdout, "API key: %s\n", apiKeyResp.GetApiKey().GetApiKey())
+	if ts := apiKeyResp.GetApiKey().GetCreatedAt(); ts != nil {
+		fmt.Fprintf(a.streams.Stdout, "Created at: %s\n", formatProtoTimestamp(ts))
+	}
+	fmt.Fprintln(a.streams.Stdout, "Store this API key securely. It may not be shown again in every client.")
 	return nil
 }
 

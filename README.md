@@ -16,6 +16,8 @@ go run ./cmd/avtkit api-key list app_xxx
 go run ./cmd/avtkit api-key create app_xxx
 ```
 
+`avtkit app create` now creates the app and an initial API key in one step, then prints the app name, `app_id`, and `api_key`.
+
 Generated protobuf code is committed under `api/generated`, but the repo does not track protobuf sources under `proto/`.
 To refresh generated code locally, check out `shared-proto` next to this repo and run:
 

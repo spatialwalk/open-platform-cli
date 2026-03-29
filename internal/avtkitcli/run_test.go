@@ -192,6 +192,9 @@ func TestRunUsageShowsAvtkitNames(t *testing.T) {
 	if !errors.As(err, &exitErr) || exitErr.Code != 2 {
 		t.Fatalf("expected exit code 2, got %#v", err)
 	}
+	if !strings.Contains(stderr.String(), "Create an app and automatically create an API key") {
+		t.Fatalf("expected updated app create help text, got %q", stderr.String())
+	}
 }
 
 func TestResolveOptionsUsesSingleDefaultBaseURL(t *testing.T) {
@@ -446,6 +449,134 @@ func TestRunAPIKeyListMasksValuesByDefault(t *testing.T) {
 	}
 	if !strings.Contains(output, "secretva******456789") {
 		t.Fatalf("expected masked API key output, got %q", output)
+	}
+}
+
+func TestRunAppCreateAlsoCreatesAPIKey(t *testing.T) {
+	dir := t.TempDir()
+	store, err := newAuthStore(dir)
+	if err != nil {
+		t.Fatalf("newAuthStore: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/apps":
+			writeProtoJSON(t, w, &consolev1.AppServiceCreateAppResponse{
+				AppId: "app_123",
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/apps/app_123/api-keys":
+			writeProtoJSON(t, w, &consolev1.AppServiceCreateAPIKeyResponse{
+				ApiKey: &consolev1.APIKey{
+					ApiKey:    "sk_live_123",
+					CreatedAt: timestamppb.New(time.Date(2026, 3, 29, 13, 0, 0, 0, time.UTC)),
+				},
+			})
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	if err := store.Save(&authState{
+		BaseURL: server.URL,
+		Token: tokenState{
+			AccessToken:  "stored-access",
+			RefreshToken: "stored-refresh",
+			ExpiresAt:    time.Now().Add(time.Hour).UTC(),
+		},
+	}); err != nil {
+		t.Fatalf("save auth state: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err = Run(context.Background(), []string{"--config-dir", dir, "app", "create", "demo-app"}, Streams{
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	output := stdout.String()
+	for _, want := range []string{
+		"App created and API key generated.",
+		"Name: demo-app",
+		"App ID: app_123",
+		"API key: sk_live_123",
+		"Created at: 2026-03-29T13:00:00Z",
+		"Store this API key securely.",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected output to contain %q, got %q", want, output)
+		}
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+}
+
+func TestRunAppCreateReportsCreatedAppWhenAPIKeyCreationFails(t *testing.T) {
+	dir := t.TempDir()
+	store, err := newAuthStore(dir)
+	if err != nil {
+		t.Fatalf("newAuthStore: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/apps":
+			writeProtoJSON(t, w, &consolev1.AppServiceCreateAppResponse{
+				AppId: "app_123",
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/apps/app_123/api-keys":
+			http.Error(w, `{"error":"boom"}`, http.StatusInternalServerError)
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	if err := store.Save(&authState{
+		BaseURL: server.URL,
+		Token: tokenState{
+			AccessToken:  "stored-access",
+			RefreshToken: "stored-refresh",
+			ExpiresAt:    time.Now().Add(time.Hour).UTC(),
+		},
+	}); err != nil {
+		t.Fatalf("save auth state: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err = Run(context.Background(), []string{"--config-dir", dir, "app", "create", "demo-app"}, Streams{
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "app created with ID app_123, but failed to create API key") {
+		t.Fatalf("expected partial failure error, got %v", err)
+	}
+
+	output := stdout.String()
+	for _, want := range []string{
+		"App created.",
+		"Name: demo-app",
+		"App ID: app_123",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected output to contain %q, got %q", want, output)
+		}
+	}
+	if strings.Contains(output, "API key:") {
+		t.Fatalf("did not expect API key output, got %q", output)
+	}
+	if !strings.Contains(stderr.String(), "avtkit api-key create app_123") {
+		t.Fatalf("expected manual api-key create guidance, got %q", stderr.String())
 	}
 }
 

@@ -130,7 +130,7 @@ func (a *app) run(ctx context.Context, args []string) error {
 		fmt.Fprintln(a.streams.Stderr, "  auth status      Show the current login state")
 		fmt.Fprintln(a.streams.Stderr, "  auth refresh     Refresh the stored access token")
 		fmt.Fprintln(a.streams.Stderr, "  app list         List apps for the current account")
-		fmt.Fprintln(a.streams.Stderr, "  app create       Create an app and return its app ID")
+		fmt.Fprintln(a.streams.Stderr, "  app create       Create an app and automatically create an API key")
 		fmt.Fprintln(a.streams.Stderr, "  app get          Show app details and API keys")
 		fmt.Fprintln(a.streams.Stderr, "  app delete       Delete an app")
 		fmt.Fprintln(a.streams.Stderr, "  api-key list     List API keys for an app")
