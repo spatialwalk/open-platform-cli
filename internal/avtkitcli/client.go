@@ -7,10 +7,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	consolev1 "github.com/spatialwalk/open-platform-cli/api/generated/console/v1"
+	jsonapiv1 "github.com/spatialwalk/open-platform-cli/api/generated/jsonapi/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -49,7 +52,7 @@ func NewAPIClient(baseURL string) *APIClient {
 
 func (c *APIClient) CreateCLIAuthSession(ctx context.Context, req *consolev1.CreateCLIAuthSessionRequest) (*consolev1.CreateCLIAuthSessionResponse, error) {
 	resp := &consolev1.CreateCLIAuthSessionResponse{}
-	if err := c.do(ctx, http.MethodPost, "/v1/cli/auth/sessions", req, "", resp); err != nil {
+	if err := c.do(ctx, http.MethodPost, "/v1/cli/auth/sessions", nil, req, "", resp); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -57,7 +60,7 @@ func (c *APIClient) CreateCLIAuthSession(ctx context.Context, req *consolev1.Cre
 
 func (c *APIClient) ExchangeCLIAuthToken(ctx context.Context, req *consolev1.ExchangeCLIAuthTokenRequest) (*consolev1.ExchangeCLIAuthTokenResponse, error) {
 	resp := &consolev1.ExchangeCLIAuthTokenResponse{}
-	if err := c.do(ctx, http.MethodPost, "/v1/cli/auth/token", req, "", resp); err != nil {
+	if err := c.do(ctx, http.MethodPost, "/v1/cli/auth/token", nil, req, "", resp); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -65,19 +68,19 @@ func (c *APIClient) ExchangeCLIAuthToken(ctx context.Context, req *consolev1.Exc
 
 func (c *APIClient) RefreshCLIAuthToken(ctx context.Context, req *consolev1.RefreshCLIAuthTokenRequest) (*consolev1.RefreshCLIAuthTokenResponse, error) {
 	resp := &consolev1.RefreshCLIAuthTokenResponse{}
-	if err := c.do(ctx, http.MethodPost, "/v1/cli/auth/token:refresh", req, "", resp); err != nil {
+	if err := c.do(ctx, http.MethodPost, "/v1/cli/auth/token:refresh", nil, req, "", resp); err != nil {
 		return nil, err
 	}
 	return resp, nil
 }
 
 func (c *APIClient) RevokeCLIAuthToken(ctx context.Context, req *consolev1.RevokeCLIAuthTokenRequest) error {
-	return c.do(ctx, http.MethodPost, "/v1/cli/auth/token:revoke", req, "", &consolev1.RevokeCLIAuthTokenResponse{})
+	return c.do(ctx, http.MethodPost, "/v1/cli/auth/token:revoke", nil, req, "", &consolev1.RevokeCLIAuthTokenResponse{})
 }
 
 func (c *APIClient) GetMe(ctx context.Context, accessToken string) (*consolev1.ConsoleUser, error) {
 	resp := &consolev1.GetMeResponse{}
-	if err := c.do(ctx, http.MethodGet, "/v1/auth/me", nil, accessToken, resp); err != nil {
+	if err := c.do(ctx, http.MethodGet, "/v1/auth/me", nil, nil, accessToken, resp); err != nil {
 		return nil, err
 	}
 	if resp.GetUser() == nil {
@@ -86,8 +89,63 @@ func (c *APIClient) GetMe(ctx context.Context, accessToken string) (*consolev1.C
 	return resp.GetUser(), nil
 }
 
-func (c *APIClient) do(ctx context.Context, method, path string, request proto.Message, accessToken string, response proto.Message) error {
+func (c *APIClient) CreateApp(ctx context.Context, accessToken string, req *consolev1.AppServiceCreateAppRequest) (*consolev1.AppServiceCreateAppResponse, error) {
+	resp := &consolev1.AppServiceCreateAppResponse{}
+	if err := c.do(ctx, http.MethodPost, "/v1/apps", nil, req, accessToken, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (c *APIClient) ListApps(ctx context.Context, accessToken string, req *consolev1.AppServiceListAppsRequest) (*consolev1.AppServiceListAppsResponse, error) {
+	resp := &consolev1.AppServiceListAppsResponse{}
+	if err := c.do(ctx, http.MethodGet, "/v1/apps", paginationQuery(req.GetPagination()), nil, accessToken, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (c *APIClient) GetApp(ctx context.Context, accessToken, appID string) (*consolev1.AppServiceGetAppResponse, error) {
+	resp := &consolev1.AppServiceGetAppResponse{}
+	if err := c.do(ctx, http.MethodGet, "/v1/apps/"+url.PathEscape(strings.TrimSpace(appID)), nil, nil, accessToken, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (c *APIClient) DeleteApp(ctx context.Context, accessToken, appID string) error {
+	return c.do(ctx, http.MethodDelete, "/v1/apps/"+url.PathEscape(strings.TrimSpace(appID)), nil, nil, accessToken, &consolev1.AppServiceDeleteAppResponse{})
+}
+
+func (c *APIClient) CreateAPIKey(ctx context.Context, accessToken, appID string) (*consolev1.AppServiceCreateAPIKeyResponse, error) {
+	resp := &consolev1.AppServiceCreateAPIKeyResponse{}
+	req := &consolev1.AppServiceCreateAPIKeyRequest{AppId: strings.TrimSpace(appID)}
+	path := "/v1/apps/" + url.PathEscape(strings.TrimSpace(appID)) + "/api-keys"
+	if err := c.do(ctx, http.MethodPost, path, nil, req, accessToken, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (c *APIClient) ListAPIKeys(ctx context.Context, accessToken, appID string, req *consolev1.AppServiceListAPIKeysRequest) (*consolev1.AppServiceListAPIKeysResponse, error) {
+	resp := &consolev1.AppServiceListAPIKeysResponse{}
+	path := "/v1/apps/" + url.PathEscape(strings.TrimSpace(appID)) + "/api-keys"
+	if err := c.do(ctx, http.MethodGet, path, paginationQuery(req.GetPagination()), nil, accessToken, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (c *APIClient) DeleteAPIKey(ctx context.Context, accessToken, appID, apiKey string) error {
+	path := "/v1/apps/" + url.PathEscape(strings.TrimSpace(appID)) + "/api-keys/" + url.PathEscape(strings.TrimSpace(apiKey))
+	return c.do(ctx, http.MethodDelete, path, nil, nil, accessToken, &consolev1.AppServiceDeleteAPIKeyResponse{})
+}
+
+func (c *APIClient) do(ctx context.Context, method, path string, query url.Values, request proto.Message, accessToken string, response proto.Message) error {
 	fullURL := c.baseURL + path
+	if len(query) > 0 {
+		fullURL += "?" + query.Encode()
+	}
 
 	var body io.Reader
 	if request != nil && method != http.MethodGet {
@@ -138,6 +196,24 @@ func (c *APIClient) do(ctx context.Context, method, path string, request proto.M
 		return fmt.Errorf("decode response: %w", err)
 	}
 	return nil
+}
+
+func paginationQuery(pagination *jsonapiv1.PaginationRequest) url.Values {
+	if pagination == nil {
+		return nil
+	}
+
+	values := url.Values{}
+	if pagination.GetPageSize() > 0 {
+		values.Set("pagination.pageSize", strconv.Itoa(int(pagination.GetPageSize())))
+	}
+	if token := strings.TrimSpace(pagination.GetPageToken()); token != "" {
+		values.Set("pagination.pageToken", token)
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	return values
 }
 
 func parseHTTPErrorMessage(payload []byte) string {
