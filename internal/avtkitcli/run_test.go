@@ -183,10 +183,13 @@ func TestRunUsageShowsAvtkitNames(t *testing.T) {
 	if !strings.Contains(stderr.String(), "auth status") {
 		t.Fatalf("expected auth commands in usage, got %q", stderr.String())
 	}
-	for _, want := range []string{"app list", "app create", "api-key list", "api-key create", "public-avatar list", "session-token create"} {
+	for _, want := range []string{"app list|ls", "app create", "api-key list|ls", "api-key create", "avatar list|ls", "session-token create"} {
 		if !strings.Contains(stderr.String(), want) {
 			t.Fatalf("expected usage to contain %q, got %q", want, stderr.String())
 		}
+	}
+	if strings.Contains(stderr.String(), "public-avatar") {
+		t.Fatalf("expected usage to stop mentioning public-avatar, got %q", stderr.String())
 	}
 	if _, ok := err.(*ExitError); !ok {
 		t.Fatalf("expected ExitError, got %T", err)
@@ -324,7 +327,7 @@ func TestRunAppListUsesStoredAuthAndPrintsPagination(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	err = Run(context.Background(), []string{"--config-dir", dir, "app", "list", "--page-size", "2"}, Streams{
+	err = Run(context.Background(), []string{"--config-dir", dir, "app", "ls", "--page-size", "2"}, Streams{
 		Stdout: &stdout,
 		Stderr: &stderr,
 	})
@@ -451,7 +454,7 @@ func TestRunPublicAvatarListUsesStoredAuthAndPrintsPagination(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	err = Run(context.Background(), []string{"--config-dir", dir, "public-avatar", "list", "--page-size", "2"}, Streams{
+	err = Run(context.Background(), []string{"--config-dir", dir, "avatar", "ls", "--page-size", "2"}, Streams{
 		Stdout: &stdout,
 		Stderr: &stderr,
 	})
@@ -501,7 +504,7 @@ func TestRunAPIKeyListMasksValuesByDefault(t *testing.T) {
 	}
 
 	var stdout bytes.Buffer
-	err = Run(context.Background(), []string{"--config-dir", dir, "api-key", "list", "app_123"}, Streams{
+	err = Run(context.Background(), []string{"--config-dir", dir, "api-key", "ls", "app_123"}, Streams{
 		Stdout: &stdout,
 		Stderr: &bytes.Buffer{},
 	})

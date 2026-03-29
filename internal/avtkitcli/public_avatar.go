@@ -17,18 +17,18 @@ type publicAvatarListOptions struct {
 
 func (a *app) runPublicAvatar(ctx context.Context, global globalOptions, args []string) error {
 	if len(args) == 0 {
-		fmt.Fprintf(a.streams.Stderr, "Usage: %s public-avatar <list>\n", cliName)
+		fmt.Fprintf(a.streams.Stderr, "Usage: %s avatar <list|ls>\n", cliName)
 		return &ExitError{Code: 2}
 	}
 
 	switch args[0] {
-	case "list":
+	case "list", "ls":
 		return a.runPublicAvatarList(ctx, global, args[1:])
 	case "help", "-h", "--help":
-		fmt.Fprintf(a.streams.Stderr, "Usage: %s public-avatar <list>\n", cliName)
+		fmt.Fprintf(a.streams.Stderr, "Usage: %s avatar <list|ls>\n", cliName)
 		return nil
 	default:
-		return &ExitError{Code: 2, Message: fmt.Sprintf("unknown public-avatar command %q", args[0])}
+		return &ExitError{Code: 2, Message: fmt.Sprintf("unknown avatar command %q", args[0])}
 	}
 }
 
@@ -37,18 +37,18 @@ func (a *app) runPublicAvatarList(ctx context.Context, global globalOptions, arg
 		listOptions: listOptions{PageSize: defaultListPageSize},
 	}
 
-	fs := flag.NewFlagSet("public-avatar list", flag.ContinueOnError)
+	fs := flag.NewFlagSet("avatar list", flag.ContinueOnError)
 	fs.SetOutput(a.streams.Stderr)
 	fs.IntVar(&opts.PageSize, "page-size", opts.PageSize, "Number of public avatars to fetch")
 	fs.StringVar(&opts.PageToken, "page-token", "", "Pagination token returned by a previous list command")
 	fs.Usage = func() {
-		fmt.Fprintf(a.streams.Stderr, "Usage: %s public-avatar list [--page-size N] [--page-token TOKEN]\n", cliName)
+		fmt.Fprintf(a.streams.Stderr, "Usage: %s avatar <list|ls> [--page-size N] [--page-token TOKEN]\n", cliName)
 	}
 	if err := fs.Parse(args); err != nil {
 		return &ExitError{Code: 2, Message: err.Error()}
 	}
 	if fs.NArg() != 0 {
-		return &ExitError{Code: 2, Message: "public-avatar list does not accept positional arguments"}
+		return &ExitError{Code: 2, Message: "avatar list does not accept positional arguments"}
 	}
 	if opts.PageSize <= 0 {
 		return &ExitError{Code: 2, Message: "--page-size must be greater than zero"}

@@ -129,14 +129,14 @@ func (a *app) run(ctx context.Context, args []string) error {
 		fmt.Fprintln(a.streams.Stderr, "  logout           Revoke stored tokens and clear local auth state")
 		fmt.Fprintln(a.streams.Stderr, "  auth status      Show the current login state")
 		fmt.Fprintln(a.streams.Stderr, "  auth refresh     Refresh the stored access token")
-		fmt.Fprintln(a.streams.Stderr, "  app list         List apps for the current account")
+		fmt.Fprintln(a.streams.Stderr, "  app list|ls      List apps for the current account")
 		fmt.Fprintln(a.streams.Stderr, "  app create       Create an app and automatically create an API key")
 		fmt.Fprintln(a.streams.Stderr, "  app get          Show app details and API keys")
 		fmt.Fprintln(a.streams.Stderr, "  app delete       Delete an app")
-		fmt.Fprintln(a.streams.Stderr, "  api-key list     List API keys for an app")
+		fmt.Fprintln(a.streams.Stderr, "  api-key list|ls  List API keys for an app")
 		fmt.Fprintln(a.streams.Stderr, "  api-key create   Create an API key for an app")
 		fmt.Fprintln(a.streams.Stderr, "  api-key delete   Delete an API key from an app")
-		fmt.Fprintln(a.streams.Stderr, "  public-avatar list   List public avatars")
+		fmt.Fprintln(a.streams.Stderr, "  avatar list|ls   List public avatars")
 		fmt.Fprintln(a.streams.Stderr, "  session-token create Create a temporary session token for an app")
 		fmt.Fprintln(a.streams.Stderr)
 		fmt.Fprintln(a.streams.Stderr, "Environment:")
@@ -173,7 +173,7 @@ func (a *app) run(ctx context.Context, args []string) error {
 		return a.runApp(ctx, global, rest[1:])
 	case "api-key":
 		return a.runAPIKey(ctx, global, rest[1:])
-	case "public-avatar":
+	case "avatar":
 		return a.runPublicAvatar(ctx, global, rest[1:])
 	case "session-token":
 		return a.runSessionToken(ctx, global, rest[1:])

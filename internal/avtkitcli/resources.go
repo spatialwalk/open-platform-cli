@@ -46,12 +46,12 @@ type authedSession struct {
 
 func (a *app) runApp(ctx context.Context, global globalOptions, args []string) error {
 	if len(args) == 0 {
-		fmt.Fprintf(a.streams.Stderr, "Usage: %s app <list|create|get|delete>\n", cliName)
+		fmt.Fprintf(a.streams.Stderr, "Usage: %s app <list|ls|create|get|delete>\n", cliName)
 		return &ExitError{Code: 2}
 	}
 
 	switch args[0] {
-	case "list":
+	case "list", "ls":
 		return a.runAppList(ctx, global, args[1:])
 	case "create":
 		return a.runAppCreate(ctx, global, args[1:])
@@ -60,7 +60,7 @@ func (a *app) runApp(ctx context.Context, global globalOptions, args []string) e
 	case "delete":
 		return a.runAppDelete(ctx, global, args[1:])
 	case "help", "-h", "--help":
-		fmt.Fprintf(a.streams.Stderr, "Usage: %s app <list|create|get|delete>\n", cliName)
+		fmt.Fprintf(a.streams.Stderr, "Usage: %s app <list|ls|create|get|delete>\n", cliName)
 		return nil
 	default:
 		return &ExitError{Code: 2, Message: fmt.Sprintf("unknown app command %q", args[0])}
@@ -69,19 +69,19 @@ func (a *app) runApp(ctx context.Context, global globalOptions, args []string) e
 
 func (a *app) runAPIKey(ctx context.Context, global globalOptions, args []string) error {
 	if len(args) == 0 {
-		fmt.Fprintf(a.streams.Stderr, "Usage: %s api-key <list|create|delete>\n", cliName)
+		fmt.Fprintf(a.streams.Stderr, "Usage: %s api-key <list|ls|create|delete>\n", cliName)
 		return &ExitError{Code: 2}
 	}
 
 	switch args[0] {
-	case "list":
+	case "list", "ls":
 		return a.runAPIKeyList(ctx, global, args[1:])
 	case "create":
 		return a.runAPIKeyCreate(ctx, global, args[1:])
 	case "delete":
 		return a.runAPIKeyDelete(ctx, global, args[1:])
 	case "help", "-h", "--help":
-		fmt.Fprintf(a.streams.Stderr, "Usage: %s api-key <list|create|delete>\n", cliName)
+		fmt.Fprintf(a.streams.Stderr, "Usage: %s api-key <list|ls|create|delete>\n", cliName)
 		return nil
 	default:
 		return &ExitError{Code: 2, Message: fmt.Sprintf("unknown api-key command %q", args[0])}
@@ -96,7 +96,7 @@ func (a *app) runAppList(ctx context.Context, global globalOptions, args []strin
 	fs.IntVar(&opts.PageSize, "page-size", opts.PageSize, "Number of apps to fetch")
 	fs.StringVar(&opts.PageToken, "page-token", "", "Pagination token returned by a previous list command")
 	fs.Usage = func() {
-		fmt.Fprintf(a.streams.Stderr, "Usage: %s app list [--page-size N] [--page-token TOKEN]\n", cliName)
+		fmt.Fprintf(a.streams.Stderr, "Usage: %s app <list|ls> [--page-size N] [--page-token TOKEN]\n", cliName)
 	}
 	if err := fs.Parse(args); err != nil {
 		return &ExitError{Code: 2, Message: err.Error()}
@@ -297,7 +297,7 @@ func (a *app) runAPIKeyList(ctx context.Context, global globalOptions, args []st
 	fs.StringVar(&opts.PageToken, "page-token", "", "Pagination token returned by a previous list command")
 	fs.BoolVar(&opts.ShowValues, "show-values", false, "Show full API key values instead of masked values")
 	fs.Usage = func() {
-		fmt.Fprintf(a.streams.Stderr, "Usage: %s api-key list [--page-size N] [--page-token TOKEN] [--show-values] <app-id>\n", cliName)
+		fmt.Fprintf(a.streams.Stderr, "Usage: %s api-key <list|ls> [--page-size N] [--page-token TOKEN] [--show-values] <app-id>\n", cliName)
 	}
 	if err := fs.Parse(args); err != nil {
 		return &ExitError{Code: 2, Message: err.Error()}
