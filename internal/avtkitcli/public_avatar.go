@@ -75,13 +75,12 @@ func (a *app) runPublicAvatarList(ctx context.Context, global globalOptions, arg
 	}
 
 	tw := tabwriter.NewWriter(a.streams.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "AVATAR ID\tNAME\tCOVER URL\tUPDATED AT")
+	fmt.Fprintln(tw, "AVATAR ID\tNAME\tCOVER URL")
 	for _, item := range publicAvatars {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n",
+		fmt.Fprintf(tw, "%s\t%s\t%s\n",
 			defaultIfEmpty(item.GetId(), "-"),
 			defaultIfEmpty(item.GetName(), "-"),
 			defaultIfEmpty(item.GetCoverUrl(), "-"),
-			formatProtoTimestamp(item.GetUpdatedAt()),
 		)
 	}
 	_ = tw.Flush()

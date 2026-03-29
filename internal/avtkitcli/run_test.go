@@ -468,6 +468,9 @@ func TestRunPublicAvatarListUsesStoredAuthAndPrintsPagination(t *testing.T) {
 			t.Fatalf("expected output to contain %q, got %q", want, output)
 		}
 	}
+	if strings.Contains(output, "UPDATED AT") {
+		t.Fatalf("expected output to omit UPDATED AT column, got %q", output)
+	}
 }
 
 func TestRunAPIKeyListMasksValuesByDefault(t *testing.T) {
