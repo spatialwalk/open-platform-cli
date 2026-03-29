@@ -4,8 +4,8 @@ This Cloudflare Worker gives `avtkit` installation docs a stable URL while still
 
 ## What it serves
 
-- `GET /install.sh`: returns a bootstrap shell script for fresh installs.
-- `GET /upgrade.sh`: returns the same bootstrap flow with upgrade-oriented logging.
+- `GET /install.sh`: returns a bootstrap shell script for fresh installs and refuses to overwrite an existing `avtkit` binary.
+- `GET /upgrade.sh`: returns the same bootstrap flow for replacing an existing install.
 - `GET /latest`: returns JSON metadata for the latest GitHub release plus the stable worker URLs.
 - `GET /releases/latest/download/:os/:arch`: resolves the latest GitHub release, finds the matching asset for the requested platform, and redirects to the GitHub asset download URL.
 - `GET /healthz`: lightweight health check.
