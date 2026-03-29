@@ -183,7 +183,7 @@ func TestRunUsageShowsAvtkitNames(t *testing.T) {
 	if !strings.Contains(stderr.String(), "auth status") {
 		t.Fatalf("expected auth commands in usage, got %q", stderr.String())
 	}
-	for _, want := range []string{"app list|ls", "app create", "api-key list|ls", "api-key create", "avatar list|ls", "session-token create"} {
+	for _, want := range []string{"app list|ls", "app create", "api-key list|ls", "api-key create", "avatar list|ls", "token create"} {
 		if !strings.Contains(stderr.String(), want) {
 			t.Fatalf("expected usage to contain %q, got %q", want, stderr.String())
 		}
@@ -651,7 +651,7 @@ func TestRunSessionTokenCreateUsesAppAPIKey(t *testing.T) {
 	start := time.Now().UTC()
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	err = Run(context.Background(), []string{"--config-dir", dir, "session-token", "create", "--expire-in", "90m", "--model-version", "model-v1", "app_123"}, Streams{
+	err = Run(context.Background(), []string{"--config-dir", dir, "token", "create", "--expire-in", "90m", "--model-version", "model-v1", "app_123"}, Streams{
 		Stdout: &stdout,
 		Stderr: &stderr,
 	})

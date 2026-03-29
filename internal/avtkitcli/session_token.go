@@ -24,7 +24,7 @@ type sessionTokenCreateOptions struct {
 
 func (a *app) runSessionToken(ctx context.Context, global globalOptions, args []string) error {
 	if len(args) == 0 {
-		fmt.Fprintf(a.streams.Stderr, "Usage: %s session-token <create>\n", cliName)
+		fmt.Fprintf(a.streams.Stderr, "Usage: %s token <create>\n", cliName)
 		return &ExitError{Code: 2}
 	}
 
@@ -32,10 +32,10 @@ func (a *app) runSessionToken(ctx context.Context, global globalOptions, args []
 	case "create":
 		return a.runSessionTokenCreate(ctx, global, args[1:])
 	case "help", "-h", "--help":
-		fmt.Fprintf(a.streams.Stderr, "Usage: %s session-token <create>\n", cliName)
+		fmt.Fprintf(a.streams.Stderr, "Usage: %s token <create>\n", cliName)
 		return nil
 	default:
-		return &ExitError{Code: 2, Message: fmt.Sprintf("unknown session-token command %q", args[0])}
+		return &ExitError{Code: 2, Message: fmt.Sprintf("unknown token command %q", args[0])}
 	}
 }
 
@@ -44,19 +44,19 @@ func (a *app) runSessionTokenCreate(ctx context.Context, global globalOptions, a
 		ExpireIn: defaultSessionTokenTTL,
 	}
 
-	fs := flag.NewFlagSet("session-token create", flag.ContinueOnError)
+	fs := flag.NewFlagSet("token create", flag.ContinueOnError)
 	fs.SetOutput(a.streams.Stderr)
 	fs.StringVar(&opts.APIKey, "api-key", "", "Use a specific API key from the app instead of the first available key")
 	fs.DurationVar(&opts.ExpireIn, "expire-in", opts.ExpireIn, "How long the session token should remain valid (max 24h)")
 	fs.StringVar(&opts.ModelVersion, "model-version", "", "Optional model/service version embedded in the session token")
 	fs.Usage = func() {
-		fmt.Fprintf(a.streams.Stderr, "Usage: %s session-token create [--api-key KEY] [--expire-in DURATION] [--model-version VERSION] <app-id>\n", cliName)
+		fmt.Fprintf(a.streams.Stderr, "Usage: %s token create [--api-key KEY] [--expire-in DURATION] [--model-version VERSION] <app-id>\n", cliName)
 	}
 	if err := fs.Parse(args); err != nil {
 		return &ExitError{Code: 2, Message: err.Error()}
 	}
 	if fs.NArg() != 1 {
-		return &ExitError{Code: 2, Message: "session-token create requires exactly one <app-id> argument"}
+		return &ExitError{Code: 2, Message: "token create requires exactly one <app-id> argument"}
 	}
 	if opts.ExpireIn <= 0 {
 		return &ExitError{Code: 2, Message: "--expire-in must be greater than zero"}
