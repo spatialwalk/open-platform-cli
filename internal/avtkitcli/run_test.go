@@ -14,6 +14,9 @@ import (
 	"time"
 
 	consolev1 "github.com/spatialwalk/open-platform-cli/api/generated/console/v1"
+	jsonapiv1 "github.com/spatialwalk/open-platform-cli/api/generated/jsonapi/v1"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -178,6 +181,11 @@ func TestRunUsageShowsAvtkitNames(t *testing.T) {
 	if !strings.Contains(stderr.String(), "auth status") {
 		t.Fatalf("expected auth commands in usage, got %q", stderr.String())
 	}
+	for _, want := range []string{"app list", "app create", "api-key list", "api-key create"} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("expected usage to contain %q, got %q", want, stderr.String())
+		}
+	}
 	if _, ok := err.(*ExitError); !ok {
 		t.Fatalf("expected ExitError, got %T", err)
 	}
@@ -264,5 +272,210 @@ func TestWriteCallbackPageEscapesFailureContent(t *testing.T) {
 	}
 	if strings.Contains(body, `<script>alert("x")</script>`) || strings.Contains(body, `<b>did not</b>`) {
 		t.Fatalf("expected HTML content to be escaped, got %q", body)
+	}
+}
+
+func TestRunAppListUsesStoredAuthAndPrintsPagination(t *testing.T) {
+	dir := t.TempDir()
+	store, err := newAuthStore(dir)
+	if err != nil {
+		t.Fatalf("newAuthStore: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/apps" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer stored-access" {
+			t.Fatalf("expected stored access token, got %q", got)
+		}
+		if got := r.URL.Query().Get("pagination.pageSize"); got != "2" {
+			t.Fatalf("expected page size query of 2, got %q", got)
+		}
+
+		writeProtoJSON(t, w, &consolev1.AppServiceListAppsResponse{
+			Apps: []*consolev1.App{
+				{
+					AppId:     "app_123",
+					Name:      "demo-app",
+					CreatedAt: timestamppb.New(time.Date(2026, 3, 29, 12, 0, 0, 0, time.UTC)),
+				},
+			},
+			Pagination: &jsonapiv1.PaginationResponse{},
+		})
+	}))
+	defer server.Close()
+
+	if err := store.Save(&authState{
+		BaseURL: server.URL,
+		Token: tokenState{
+			AccessToken:  "stored-access",
+			RefreshToken: "stored-refresh",
+			ExpiresAt:    time.Now().Add(time.Hour).UTC(),
+		},
+	}); err != nil {
+		t.Fatalf("save auth state: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err = Run(context.Background(), []string{"--config-dir", dir, "app", "list", "--page-size", "2"}, Streams{
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v (stderr=%q)", err, stderr.String())
+	}
+
+	output := stdout.String()
+	for _, want := range []string{"APP ID", "app_123", "demo-app"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected output to contain %q, got %q", want, output)
+		}
+	}
+}
+
+func TestRunAppListRefreshesExpiredToken(t *testing.T) {
+	dir := t.TempDir()
+	store, err := newAuthStore(dir)
+	if err != nil {
+		t.Fatalf("newAuthStore: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/cli/auth/token:refresh":
+			if r.Method != http.MethodPost {
+				t.Fatalf("unexpected method %s", r.Method)
+			}
+			writeProtoJSON(t, w, &consolev1.RefreshCLIAuthTokenResponse{
+				Token: &consolev1.CLIAuthToken{
+					AccessToken:  "fresh-access",
+					RefreshToken: "fresh-refresh",
+					TokenType:    "Bearer",
+					ExpiresAt:    timestamppb.New(time.Now().Add(time.Hour)),
+				},
+			})
+		case "/v1/apps":
+			if got := r.Header.Get("Authorization"); got != "Bearer fresh-access" {
+				t.Fatalf("expected refreshed access token, got %q", got)
+			}
+			writeProtoJSON(t, w, &consolev1.AppServiceListAppsResponse{})
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	if err := store.Save(&authState{
+		BaseURL: server.URL,
+		Token: tokenState{
+			AccessToken:  "expired-access",
+			RefreshToken: "stale-refresh",
+			ExpiresAt:    time.Now().Add(-time.Minute).UTC(),
+		},
+	}); err != nil {
+		t.Fatalf("save auth state: %v", err)
+	}
+
+	err = Run(context.Background(), []string{"--config-dir", dir, "app", "list"}, Streams{
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	updated, err := store.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if updated.Token.AccessToken != "fresh-access" {
+		t.Fatalf("expected refreshed access token, got %q", updated.Token.AccessToken)
+	}
+	if updated.Token.RefreshToken != "fresh-refresh" {
+		t.Fatalf("expected refreshed refresh token, got %q", updated.Token.RefreshToken)
+	}
+}
+
+func TestRunAPIKeyListMasksValuesByDefault(t *testing.T) {
+	dir := t.TempDir()
+	store, err := newAuthStore(dir)
+	if err != nil {
+		t.Fatalf("newAuthStore: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/apps/app_123/api-keys" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		writeProtoJSON(t, w, &consolev1.AppServiceListAPIKeysResponse{
+			ApiKeys: []*consolev1.APIKey{
+				{
+					ApiKey:    "secretvalue123456789",
+					CreatedAt: timestamppb.New(time.Date(2026, 3, 29, 13, 0, 0, 0, time.UTC)),
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	if err := store.Save(&authState{
+		BaseURL: server.URL,
+		Token: tokenState{
+			AccessToken:  "stored-access",
+			RefreshToken: "stored-refresh",
+			ExpiresAt:    time.Now().Add(time.Hour).UTC(),
+		},
+	}); err != nil {
+		t.Fatalf("save auth state: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	err = Run(context.Background(), []string{"--config-dir", dir, "api-key", "list", "app_123"}, Streams{
+		Stdout: &stdout,
+		Stderr: &bytes.Buffer{},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	output := stdout.String()
+	if strings.Contains(output, "secretvalue123456789") {
+		t.Fatalf("expected API key to be masked, got %q", output)
+	}
+	if !strings.Contains(output, "secretva******456789") {
+		t.Fatalf("expected masked API key output, got %q", output)
+	}
+}
+
+func TestRunAppDeleteRequiresYes(t *testing.T) {
+	err := Run(context.Background(), []string{"app", "delete", "app_123"}, Streams{
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+	})
+
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected ExitError, got %T", err)
+	}
+	if exitErr.Code != 2 {
+		t.Fatalf("expected exit code 2, got %d", exitErr.Code)
+	}
+	if !strings.Contains(exitErr.Error(), "--yes") {
+		t.Fatalf("expected --yes guidance, got %q", exitErr.Error())
+	}
+}
+
+func writeProtoJSON(t *testing.T, w http.ResponseWriter, message proto.Message) {
+	t.Helper()
+
+	payload, err := protojson.Marshal(message)
+	if err != nil {
+		t.Fatalf("marshal response: %v", err)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if _, err := w.Write(payload); err != nil {
+		t.Fatalf("write response: %v", err)
 	}
 }
