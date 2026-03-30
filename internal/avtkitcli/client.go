@@ -169,6 +169,14 @@ func (c *APIClient) GetUsage(ctx context.Context, accessToken string, req *conso
 	return resp, nil
 }
 
+func (c *APIClient) GetCreditBalance(ctx context.Context, accessToken string) (*consolev2.GetCreditBalanceResponse, error) {
+	resp := &consolev2.GetCreditBalanceResponse{}
+	if err := c.do(ctx, http.MethodGet, "/v2/billing/credits", nil, nil, accessToken, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
 func (c *APIClient) GetSessionCount(ctx context.Context, accessToken string, req *consolev2.GetSessionCountRequest) (*consolev2.GetSessionCountResponse, error) {
 	resp := &consolev2.GetSessionCountResponse{}
 	if err := c.do(ctx, http.MethodGet, "/api/console/v2/stats/session-count", userStatsTimeRangeQuery(req.GetTimeRange()), nil, accessToken, resp); err != nil {

@@ -46,15 +46,17 @@ var statsTimeRangePresets = []statsTimeRangePreset{
 
 func (a *app) runStats(ctx context.Context, global globalOptions, args []string) error {
 	if len(args) == 0 {
-		fmt.Fprintf(a.streams.Stderr, "Usage: %s stats <usage>\n", cliName)
+		fmt.Fprintf(a.streams.Stderr, "Usage: %s stats <usage|credits>\n", cliName)
 		return &ExitError{Code: 2}
 	}
 
 	switch args[0] {
 	case "usage":
 		return a.runStatsUsage(ctx, global, args[1:])
+	case "credits":
+		return a.runStatsCredits(ctx, global, args[1:])
 	case "help", "-h", "--help":
-		fmt.Fprintf(a.streams.Stderr, "Usage: %s stats <usage>\n", cliName)
+		fmt.Fprintf(a.streams.Stderr, "Usage: %s stats <usage|credits>\n", cliName)
 		return nil
 	default:
 		return &ExitError{Code: 2, Message: fmt.Sprintf("unknown stats command %q", args[0])}
@@ -120,6 +122,32 @@ func (a *app) runStatsUsage(ctx context.Context, global globalOptions, args []st
 	return nil
 }
 
+func (a *app) runStatsCredits(ctx context.Context, global globalOptions, args []string) error {
+	fs := flag.NewFlagSet("stats credits", flag.ContinueOnError)
+	fs.SetOutput(a.streams.Stderr)
+	fs.Usage = func() {
+		fmt.Fprintf(a.streams.Stderr, "Usage: %s stats credits\n", cliName)
+	}
+	if err := fs.Parse(args); err != nil {
+		return &ExitError{Code: 2, Message: err.Error()}
+	}
+	if fs.NArg() != 0 {
+		return &ExitError{Code: 2, Message: "stats credits does not accept positional arguments"}
+	}
+
+	var resp *consolev2.GetCreditBalanceResponse
+	if err := a.withAuthenticatedSession(ctx, global, func(session *authedSession) error {
+		var err error
+		resp, err = session.client.GetCreditBalance(ctx, session.state.Token.AccessToken)
+		return err
+	}); err != nil {
+		return err
+	}
+
+	a.printStatsCredits(resp.GetBalance())
+	return nil
+}
+
 func parseStatsTimeRangePreset(value string) (statsTimeRangePreset, error) {
 	normalized := strings.ToLower(strings.TrimSpace(value))
 	for _, preset := range statsTimeRangePresets {
@@ -148,6 +176,13 @@ func (a *app) printStatsUsage(preset statsTimeRangePreset, usageResp *consolev2.
 	a.printUsageTrend(buildUsageTrendRows(preset, usageResp.GetDataPoints()))
 	fmt.Fprintln(a.streams.Stdout)
 	a.printSessionTrend(buildSessionTrendRows(preset, sessionResp.GetDataPoints()))
+}
+
+func (a *app) printStatsCredits(balance *consolev2.CreditBalance) {
+	fmt.Fprintln(a.streams.Stdout, "Credits Balance")
+	fmt.Fprintf(a.streams.Stdout, "View your remaining credits\n\n")
+	fmt.Fprintf(a.streams.Stdout, "Remaining Credits: %d\n", balance.GetBalance())
+	fmt.Fprintf(a.streams.Stdout, "Updated At: %s\n", formatProtoTimestamp(balance.GetUpdatedAt()))
 }
 
 func (a *app) printUsageTrend(rows []usageTrendRow) {

@@ -183,7 +183,7 @@ func TestRunUsageShowsAvtkitNames(t *testing.T) {
 	if !strings.Contains(stderr.String(), "auth status") {
 		t.Fatalf("expected auth commands in usage, got %q", stderr.String())
 	}
-	for _, want := range []string{"--version", "app list|ls", "app create", "api-key list|ls", "api-key create", "avatar list|ls", "stats usage", "token create", "version"} {
+	for _, want := range []string{"--version", "app list|ls", "app create", "api-key list|ls", "api-key create", "avatar list|ls", "stats credits", "stats usage", "token create", "version"} {
 		if !strings.Contains(stderr.String(), want) {
 			t.Fatalf("expected usage to contain %q, got %q", want, stderr.String())
 		}
@@ -551,6 +551,69 @@ func TestRunStatsUsageNoDataShowsEmptyState(t *testing.T) {
 	}
 }
 
+func TestRunStatsCreditsShowsBalance(t *testing.T) {
+	dir := t.TempDir()
+	store, err := newAuthStore(dir)
+	if err != nil {
+		t.Fatalf("newAuthStore: %v", err)
+	}
+
+	updatedAt := timestamppb.New(time.Date(2026, 3, 30, 10, 15, 0, 0, time.UTC))
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/billing/credits" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer stored-access" {
+			t.Fatalf("expected stored access token, got %q", got)
+		}
+
+		writeProtoJSON(t, w, &consolev2.GetCreditBalanceResponse{
+			Balance: &consolev2.CreditBalance{
+				Balance:   4321,
+				UpdatedAt: updatedAt,
+			},
+		})
+	}))
+	defer server.Close()
+
+	if err := store.Save(&authState{
+		BaseURL: server.URL,
+		Token: tokenState{
+			AccessToken:  "stored-access",
+			RefreshToken: "stored-refresh",
+			ExpiresAt:    time.Now().Add(time.Hour).UTC(),
+		},
+	}); err != nil {
+		t.Fatalf("save auth state: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err = Run(context.Background(), []string{"--config-dir", dir, "stats", "credits"}, Streams{
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v (stderr=%q)", err, stderr.String())
+	}
+
+	output := stdout.String()
+	for _, want := range []string{
+		"Credits Balance",
+		"View your remaining credits",
+		"Remaining Credits: 4321",
+		"Updated At: 2026-03-30T10:15:00Z",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected output to contain %q, got %q", want, output)
+		}
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+}
+
 func TestRunStatsUsageRejectsUnknownTimeRange(t *testing.T) {
 	err := Run(context.Background(), []string{"stats", "usage", "--time-range", "365d"}, Streams{
 		Stdout: &bytes.Buffer{},
@@ -569,6 +632,27 @@ func TestRunStatsUsageRejectsUnknownTimeRange(t *testing.T) {
 	}
 	if !strings.Contains(exitErr.Message, "expected one of: today, 7d, 14d, 30d, 90d, 1y") {
 		t.Fatalf("expected time-range guidance, got %q", exitErr.Message)
+	}
+}
+
+func TestRunStatsCreditsRejectsPositionalArguments(t *testing.T) {
+	err := Run(context.Background(), []string{"stats", "credits", "extra"}, Streams{
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected ExitError, got %T", err)
+	}
+	if exitErr.Code != 2 {
+		t.Fatalf("expected exit code 2, got %d", exitErr.Code)
+	}
+	if exitErr.Message != "stats credits does not accept positional arguments" {
+		t.Fatalf("unexpected error message: %q", exitErr.Message)
 	}
 }
 
