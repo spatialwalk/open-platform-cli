@@ -183,7 +183,7 @@ func TestRunUsageShowsAvtkitNames(t *testing.T) {
 	if !strings.Contains(stderr.String(), "auth status") {
 		t.Fatalf("expected auth commands in usage, got %q", stderr.String())
 	}
-	for _, want := range []string{"--version", "app list|ls", "app create", "api-key list|ls", "api-key create", "avatar list|ls", "token create", "version"} {
+	for _, want := range []string{"--version", "app list|ls", "app create", "api-key list|ls", "api-key create", "avatar list|ls", "stats usage", "token create", "version"} {
 		if !strings.Contains(stderr.String(), want) {
 			t.Fatalf("expected usage to contain %q, got %q", want, stderr.String())
 		}
@@ -403,6 +403,172 @@ func TestRunAppListRefreshesExpiredToken(t *testing.T) {
 	}
 	if updated.Token.RefreshToken != "fresh-refresh" {
 		t.Fatalf("expected refreshed refresh token, got %q", updated.Token.RefreshToken)
+	}
+}
+
+func TestRunStatsUsageShowsSummaryAndTrends(t *testing.T) {
+	dir := t.TempDir()
+	store, err := newAuthStore(dir)
+	if err != nil {
+		t.Fatalf("newAuthStore: %v", err)
+	}
+
+	firstPoint := localTimestampDaysAgo(6, 9)
+	secondPoint := localTimestampDaysAgo(1, 17)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer stored-access" {
+			t.Fatalf("expected stored access token, got %q", got)
+		}
+
+		switch r.URL.Path {
+		case "/api/console/v2/stats/usage":
+			if got := r.URL.Query().Get("timeRange"); got != "USER_STATS_TIME_RANGE_7D" {
+				t.Fatalf("expected usage timeRange query, got %q", got)
+			}
+			writeProtoJSON(t, w, &consolev2.GetUsageResponse{
+				TotalConnectionDurationMs: 90 * 60 * 1000,
+				DataPoints: []*consolev2.UsageDataPoint{
+					{Timestamp: firstPoint, ConnectionDurationMs: 60 * 1000},
+					{Timestamp: secondPoint, ConnectionDurationMs: 2 * 60 * 1000},
+				},
+			})
+		case "/api/console/v2/stats/session-count":
+			if got := r.URL.Query().Get("timeRange"); got != "USER_STATS_TIME_RANGE_7D" {
+				t.Fatalf("expected session-count timeRange query, got %q", got)
+			}
+			writeProtoJSON(t, w, &consolev2.GetSessionCountResponse{
+				TotalSessionCount:        12,
+				MaxConcurrentConnections: 4,
+				DataPoints: []*consolev2.SessionCountDataPoint{
+					{Timestamp: firstPoint, SessionCount: 2},
+					{Timestamp: secondPoint, SessionCount: 5},
+				},
+			})
+		case "/api/console/v2/stats/realtime-connections":
+			writeProtoJSON(t, w, &consolev2.GetRealtimeConcurrentConnectionsResponse{
+				ConcurrentConnections: 3,
+			})
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	if err := store.Save(&authState{
+		BaseURL: server.URL,
+		Token: tokenState{
+			AccessToken:  "stored-access",
+			RefreshToken: "stored-refresh",
+			ExpiresAt:    time.Now().Add(time.Hour).UTC(),
+		},
+	}); err != nil {
+		t.Fatalf("save auth state: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err = Run(context.Background(), []string{"--config-dir", dir, "stats", "usage", "--time-range", "7d"}, Streams{
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v (stderr=%q)", err, stderr.String())
+	}
+
+	output := stdout.String()
+	for _, want := range []string{
+		"Usage Statistics",
+		"View your API usage",
+		"Time Range: 7d (7 Days)",
+		"Live Connections: 3",
+		"Total Duration: 1h 30m",
+		"Total Connections: 12",
+		"Peak Concurrent Connections: 4",
+		"Connection Duration Trend",
+		"Connection Count Trend",
+		formatDateLabel(firstPoint.AsTime().In(time.Local)),
+		formatDateLabel(secondPoint.AsTime().In(time.Local)),
+		"1m 0s",
+		"2m 0s",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected output to contain %q, got %q", want, output)
+		}
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+}
+
+func TestRunStatsUsageNoDataShowsEmptyState(t *testing.T) {
+	dir := t.TempDir()
+	store, err := newAuthStore(dir)
+	if err != nil {
+		t.Fatalf("newAuthStore: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/console/v2/stats/usage":
+			writeProtoJSON(t, w, &consolev2.GetUsageResponse{})
+		case "/api/console/v2/stats/session-count":
+			writeProtoJSON(t, w, &consolev2.GetSessionCountResponse{})
+		case "/api/console/v2/stats/realtime-connections":
+			writeProtoJSON(t, w, &consolev2.GetRealtimeConcurrentConnectionsResponse{})
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	if err := store.Save(&authState{
+		BaseURL: server.URL,
+		Token: tokenState{
+			AccessToken:  "stored-access",
+			RefreshToken: "stored-refresh",
+			ExpiresAt:    time.Now().Add(time.Hour).UTC(),
+		},
+	}); err != nil {
+		t.Fatalf("save auth state: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	err = Run(context.Background(), []string{"--config-dir", dir, "stats", "usage"}, Streams{
+		Stdout: &stdout,
+		Stderr: &bytes.Buffer{},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	output := stdout.String()
+	if count := strings.Count(output, "No data available."); count != 2 {
+		t.Fatalf("expected empty-state message twice, got %d in %q", count, output)
+	}
+	if count := strings.Count(output, "Start a session to see your usage data here."); count != 2 {
+		t.Fatalf("expected empty-state hint twice, got %d in %q", count, output)
+	}
+}
+
+func TestRunStatsUsageRejectsUnknownTimeRange(t *testing.T) {
+	err := Run(context.Background(), []string{"stats", "usage", "--time-range", "365d"}, Streams{
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected ExitError, got %T", err)
+	}
+	if exitErr.Code != 2 {
+		t.Fatalf("expected exit code 2, got %d", exitErr.Code)
+	}
+	if !strings.Contains(exitErr.Message, "expected one of: today, 7d, 14d, 30d, 90d, 1y") {
+		t.Fatalf("expected time-range guidance, got %q", exitErr.Message)
 	}
 }
 
@@ -855,4 +1021,10 @@ func writeProtoJSON(t *testing.T, w http.ResponseWriter, message proto.Message) 
 	if _, err := w.Write(payload); err != nil {
 		t.Fatalf("write response: %v", err)
 	}
+}
+
+func localTimestampDaysAgo(days, hour int) *timestamppb.Timestamp {
+	now := time.Now().In(time.Local)
+	value := time.Date(now.Year(), now.Month(), now.Day()-days, hour, 0, 0, 0, time.Local)
+	return timestamppb.New(value.UTC())
 }
