@@ -15,6 +15,8 @@ go run ./cmd/avtkit app get app_xxx
 go run ./cmd/avtkit api-key list app_xxx
 go run ./cmd/avtkit api-key create app_xxx
 go run ./cmd/avtkit avatar list
+go run ./cmd/avtkit stats credits
+go run ./cmd/avtkit stats usage --time-range 30d
 go run ./cmd/avtkit token create app_xxx
 go run ./cmd/avtkit --version
 go run ./cmd/avtkit version
@@ -23,6 +25,10 @@ go run ./cmd/avtkit version
 `avtkit app create` now creates the app and an initial API key in one step, then prints the app name, `app_id`, and `api_key`.
 
 `avtkit avatar list` lists public avatars from the console API using the current login session. By default it omits the `COVER URL` column; add `--show-cover-urls` to include full cover URLs in the table output.
+
+`avtkit stats credits` queries the same billing credit-balance endpoint used by the web console and prints the current remaining credits for the logged-in account.
+
+`avtkit stats usage` queries the same usage statistics APIs used by the web console and prints a CLI-friendly summary: live connections, total duration, total connections, peak concurrent connections, plus trend tables for connection duration and connection count. Supported `--time-range` presets match the web console: `today`, `7d`, `14d`, `30d`, `90d`, and `1y`. The default range is `30d`.
 
 Resource list commands also support `ls` aliases: `avtkit app ls`, `avtkit api-key ls`, and `avtkit avatar ls`.
 

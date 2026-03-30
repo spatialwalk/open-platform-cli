@@ -161,6 +161,38 @@ func (c *APIClient) ListPublicAvatars(ctx context.Context, accessToken string, r
 	return resp, nil
 }
 
+func (c *APIClient) GetUsage(ctx context.Context, accessToken string, req *consolev2.GetUsageRequest) (*consolev2.GetUsageResponse, error) {
+	resp := &consolev2.GetUsageResponse{}
+	if err := c.do(ctx, http.MethodGet, "/api/console/v2/stats/usage", userStatsTimeRangeQuery(req.GetTimeRange()), nil, accessToken, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (c *APIClient) GetCreditBalance(ctx context.Context, accessToken string) (*consolev2.GetCreditBalanceResponse, error) {
+	resp := &consolev2.GetCreditBalanceResponse{}
+	if err := c.do(ctx, http.MethodGet, "/v2/billing/credits", nil, nil, accessToken, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (c *APIClient) GetSessionCount(ctx context.Context, accessToken string, req *consolev2.GetSessionCountRequest) (*consolev2.GetSessionCountResponse, error) {
+	resp := &consolev2.GetSessionCountResponse{}
+	if err := c.do(ctx, http.MethodGet, "/api/console/v2/stats/session-count", userStatsTimeRangeQuery(req.GetTimeRange()), nil, accessToken, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (c *APIClient) GetRealtimeConcurrentConnections(ctx context.Context, accessToken string) (*consolev2.GetRealtimeConcurrentConnectionsResponse, error) {
+	resp := &consolev2.GetRealtimeConcurrentConnectionsResponse{}
+	if err := c.do(ctx, http.MethodGet, "/api/console/v2/stats/realtime-connections", nil, nil, accessToken, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
 func (c *APIClient) do(ctx context.Context, method, path string, query url.Values, request proto.Message, accessToken string, response proto.Message) error {
 	return c.doWithHeaders(ctx, method, path, query, request, accessToken, nil, response)
 }
@@ -240,6 +272,16 @@ func paginationQuery(pagination *jsonapiv1.PaginationRequest) url.Values {
 	if len(values) == 0 {
 		return nil
 	}
+	return values
+}
+
+func userStatsTimeRangeQuery(timeRange consolev2.UserStatsTimeRange) url.Values {
+	if timeRange == consolev2.UserStatsTimeRange_USER_STATS_TIME_RANGE_UNSPECIFIED {
+		return nil
+	}
+
+	values := url.Values{}
+	values.Set("timeRange", timeRange.String())
 	return values
 }
 
